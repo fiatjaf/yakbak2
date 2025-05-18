@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.7",
+    "tailwindcss": "^4.0.7",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0",
+    "vite-plugin-solid": "^2.11.6"
+  },
+  "dependencies": {
+    "@ark-ui/solid": "^5.9.1",
+    "@nostr/gadgets": "npm:@jsr/nostr__gadgets@^0.0.21",
+    "@nostr/tools": "npm:@jsr/nostr__tools@^2.13.0",
+    "solid-js": "^1.9.5"
+  }
+}
