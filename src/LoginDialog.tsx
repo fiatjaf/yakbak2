@@ -1,4 +1,15 @@
 import { Component, createSignal } from "solid-js"
+import { Button } from "./components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from "./components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs"
+import { Shield } from "lucide-solid"
+import { Input } from "./components/ui/Input"
 
 function LoginDialog() {
   const [isLoading, setIsLoading] = createSignal(false)
@@ -39,7 +50,7 @@ function LoginDialog() {
   }
 
   const handleBunkerLogin = () => {
-    if (!bunkerUri().trim() || !bunkerUri.startsWith("bunker://")) return
+    if (!bunkerUri().trim() || !bunkerUri().startsWith("bunker://")) return
     setIsLoading(true)
 
     try {
@@ -51,18 +62,6 @@ function LoginDialog() {
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = event => {
-      const content = event.target?.result as string
-      setNsec(content.trim())
-    }
-    reader.readAsText(file)
   }
 
   const handleSignupClick = () => {
@@ -86,7 +85,7 @@ function LoginDialog() {
           <Tabs defaultValue={"nostr" in window ? "extension" : "key"} class="w-full">
             <TabsList class="grid grid-cols-3 mb-6">
               <TabsTrigger value="extension">Extension</TabsTrigger>
-              <TabsTrigger value="key">Nsec</TabsTrigger>
+              <TabsTrigger value="key">nsec</TabsTrigger>
               <TabsTrigger value="bunker">Bunker</TabsTrigger>
             </TabsList>
 
@@ -119,25 +118,6 @@ function LoginDialog() {
                     class="rounded-lg border-gray-300 dark:border-gray-700 focus-visible:ring-primary"
                     placeholder="nsec1..."
                   />
-                </div>
-
-                <div class="text-center">
-                  <p class="text-sm mb-2 text-gray-600 dark:text-gray-400">Or upload a key file</p>
-                  <input
-                    type="file"
-                    accept=".txt"
-                    class="hidden"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                  />
-                  <Button
-                    variant="outline"
-                    class="w-full dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload class="w-4 h-4 mr-2" />
-                    Upload Nsec File
-                  </Button>
                 </div>
 
                 <Button
