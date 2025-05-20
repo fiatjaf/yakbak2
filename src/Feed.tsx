@@ -15,6 +15,7 @@ import { NostrEvent } from "@nostr/tools/pure"
 import { pool } from "@nostr/gadgets/global"
 import { SubCloser } from "@nostr/tools/abstract-pool"
 import { loadRelayList } from "@nostr/gadgets/lists"
+import { getSemaphore } from "@henrygd/semaphore"
 
 import { Button } from "./components/ui/button"
 import VoiceNote from "./VoiceNote"
@@ -85,17 +86,21 @@ function Feed() {
     }
 
     async function loadReplies(parent: NostrEvent) {
-      const rl = await loadRelayList(parent.pubkey)
-      const inbox = rl.items
+      const inbox = (await loadRelayList(parent.pubkey)).items
         .filter(r => r.read)
         .slice(0, 4)
         .map(r => r.url)
+
+      const msem = inbox.map(r => getSemaphore(r))
+      await Promise.all(msem.map(sem => sem.acquire()))
 
       const replies = await pool.querySync(inbox, {
         kinds: [1244],
         "#e": [parent.id],
         limit: 30
       })
+
+      msem.forEach(sem => sem.release())
 
       setThreads(threads => {
         let idx = threads.findIndex(thread => thread.event === parent)

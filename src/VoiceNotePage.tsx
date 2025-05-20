@@ -1,156 +1,162 @@
-import { Component } from "solid-js"
+import { decode, EventPointer } from "@nostr/tools/nip19"
+import { NostrEvent } from "@nostr/tools/pure"
+import { useParams } from "@solidjs/router"
+import { createResource, createEffect, createSignal, For, onCleanup, Show } from "solid-js"
+import { pool } from "@nostr/gadgets/global"
+import { loadRelayList } from "@nostr/gadgets/lists"
+import { SubCloser } from "@nostr/tools/abstract-pool"
+
+import VoiceNote from "./VoiceNote"
+import { Card } from "./components/ui/card"
 
 function VoiceNotePage() {
   const { nevent } = useParams<{ nevent: string }>()
-  const { nostr } = useNostr()
-  const decoded = nevent ? nip19.decode(nevent) : null
-  const eventId = decoded?.type === "nevent" ? decoded.data.id : null
-
-  const { data: message, isLoading } = useQuery({
-    queryKey: ["voiceMessage", eventId],
-    queryFn: async () => {
-      if (!eventId) return null
-      const signal = AbortSignal.timeout(5000)
-      const events = await nostr.query(
-        [
-          {
-            kinds: [1222],
-            ids: [eventId]
-          }
-        ],
-        { signal }
-      )
-      return events[0] ? { ...events[0], replies: [] } : null
-    },
-    enabled: !!eventId
+  const [event] = createResource(nevent, async () => {
+    const ptr = decode(nevent).data as EventPointer
+    if (ptr.relays) {
+      let res = await pool.querySync(ptr.relays, { ids: [ptr.id] })
+      if (res.length) return res[0]
+    }
+    let outboxMinusHint = (await loadRelayList(ptr.author)).items
+      .filter(r => r.write && ptr.relays.indexOf(r.url) === -1)
+      .slice(0, 4)
+      .map(r => r.url)
+    const res = await pool.querySync(outboxMinusHint, { ids: [ptr.id] })
+    if (res.length === 0) throw new Error(`couldn't find event ${ptr.id}`)
+    return res[0]
   })
 
-  // Fetch replies to this message
-  const { data: replies, isLoading: isLoadingReplies } = useQuery({
-    queryKey: ["voiceMessageReplies", eventId],
-    queryFn: async () => {
-      if (!eventId) return []
-      const signal = AbortSignal.timeout(5000)
-      const events = await nostr.query(
-        [
-          {
-            kinds: [1222],
-            // Find replies where the 'e' tag references this eventId and is a reply
-            "#e": [eventId],
-            limit: 100
-          }
-        ],
-        { signal }
-      )
-      // Only include those with a tag type 'reply'
-      const filteredReplies = events
-        .filter(ev =>
-          ev.tags.some(tag => tag[0] === "e" && tag[1] === eventId && tag[3] === "reply")
-        )
-        .sort((a, b) => a.created_at - b.created_at)
-        .map(ev => ({ ...ev, replies: [] }))
-      if (filteredReplies) {
-        console.log("VoiceMessagePage: replies.length =", filteredReplies.length, filteredReplies)
+  const [root] = createResource<NostrEvent | null, NostrEvent>(
+    event(),
+    async (event: NostrEvent) => {
+      const tag = event.tags.find(t => t[0] === "E")
+      if (!tag) return null
+
+      const id = tag[1]
+      const hint = tag[2]
+      if (hint) {
+        let res = await pool.querySync([hint], { ids: [id] })
+        if (res.length) return res[0]
       }
-      return filteredReplies
-    },
-    enabled: !!eventId
-  })
+      const author = tag[3]
+      let outboxMinusHint = (await loadRelayList(author)).items
+        .filter(r => r.write && r.url !== hint)
+        .slice(0, 4)
+        .map(r => r.url)
+      const res = await pool.querySync(outboxMinusHint, { ids: [id] })
+      return res[0] || null
+    }
+  )
 
-  // Check if the current message is a reply and get the root ID
-  const rootTag = message?.tags.find(tag => tag[0] === "e" && tag[3] === "root")
-  const rootId = rootTag ? rootTag[1] : null
+  const [replies, setReplies] = createSignal<NostrEvent[]>([])
 
-  // Fetch the root message if needed
-  const { data: rootMessage } = useQuery({
-    queryKey: ["voiceMessageRoot", rootId],
-    queryFn: async () => {
-      if (!rootId) return null
-      const signal = AbortSignal.timeout(5000)
-      const events = await nostr.query(
-        [
-          {
-            kinds: [1222],
-            ids: [rootId]
+  let closer: SubCloser
+  createEffect(async () => {
+    const parent = event()
+    if (!parent) return
+    const inbox = (await loadRelayList(parent.pubkey)).items
+      .filter(r => r.read)
+      .slice(0, 4)
+      .map(r => r.url)
+
+    let eosed = false
+    let waiting: NostrEvent[] = []
+
+    if (closer) closer.close()
+
+    closer = pool.subscribe(
+      inbox,
+      {
+        kinds: [1244],
+        "#e": [parent.id],
+        limit: 30
+      },
+      {
+        onevent(event) {
+          if (eosed) {
+            setReplies(replies => [event, ...replies])
+          } else {
+            waiting.push(event)
           }
-        ],
-        { signal }
-      )
-      return events[0] ? { ...events[0], replies: [] } : null
-    },
-    enabled: !!rootId
+        },
+        oneose() {
+          waiting.sort((a, b) => b.created_at - a.created_at)
+          setReplies(waiting)
+          waiting = null
+          eosed = true
+        }
+      }
+    )
   })
 
-  if (!eventId) {
+  onCleanup(() => {
+    if (closer) closer.close()
+  })
+
+  if (event.error) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <div className="text-center">Invalid message</div>
+      <div class="container mx-auto px-4 py-8 max-w-2xl">
+        <div class="text-center">Invalid message</div>
       </div>
     )
   }
 
-  if (isLoading) {
+  if (event.loading) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <div className="flex justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+      <div class="container mx-auto px-4 py-8 max-w-2xl">
+        <div class="flex justify-center">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
         </div>
       </div>
     )
   }
 
-  if (!message) {
+  if (!event()) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <div className="text-center">Message not found</div>
+      <div class="container mx-auto px-4 py-8 max-w-2xl">
+        <div class="text-center">Message not found</div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-2xl">
+    <div class="container mx-auto px-4 py-8 max-w-2xl">
       {/* Show root message if this is a reply */}
-      {rootMessage && (
-        <div className="mb-2">
-          <Card className="p-4 border-2 border-primary/40 bg-muted/50">
-            <VoiceMessage message={rootMessage as ThreadedNostrEvent} />
+      <Show when={root()}>
+        <div class="mb-2">
+          <Card class="p-4 border-2 border-primary/40 bg-muted/50">
+            <VoiceNote event={root()} />
           </Card>
         </div>
-      )}
+      </Show>
       {/* If root is shown, nest the current message visually */}
-      <div className={rootMessage ? "ml-6 border-l-2 border-primary/30 pl-4" : ""}>
-        {rootMessage && (
-          <div className="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wide">
+      <div class={root() ? "ml-6 border-l-2 border-primary/30 pl-4" : ""}>
+        <Show when={root()}>
+          <div class="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wide">
             Reply
           </div>
-        )}
-        <VoiceMessage message={message as ThreadedNostrEvent} />
+        </Show>
+        <VoiceNote event={event()} />
       </div>
       <div>
-        <h2 className="text-lg font-semibold mb-2">
-          {rootMessage ? "Replies to this reply" : "Replies"}
-        </h2>
-        {isLoadingReplies ? (
-          <div className="flex justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
-          </div>
-        ) : replies && replies.length > 0 ? (
-          <div className="space-y-4">
-            {replies.map(reply => (
-              <div className="ml-6 border-l-2 border-primary/20 pl-4" key={reply.id}>
-                <div className="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wide">
-                  Reply
+        <h2 class="text-lg font-semibold mb-2">{root() ? "Replies to this reply" : "Replies"}</h2>
+        <Show when={replies().length > 0}>
+          <div class="space-y-4">
+            <For each={replies()}>
+              {reply => (
+                <div class="ml-6 border-l-2 border-primary/20 pl-4">
+                  <div class="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wide">
+                    Reply
+                  </div>
+                  <VoiceNote event={reply} />
                 </div>
-                <VoiceMessage message={reply as ThreadedNostrEvent} />
-              </div>
-            ))}
+              )}
+            </For>
           </div>
-        ) : (
-          <div className="text-muted-foreground">No replies yet.</div>
-        )}
+        </Show>
       </div>
     </div>
   )
 }
 
-export default VoiceMessagePage as Component
+export default VoiceNotePage
