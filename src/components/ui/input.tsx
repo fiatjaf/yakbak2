@@ -1,7 +1,7 @@
-import { Component, ComponentProps } from "solid-js"
+import { ComponentProps } from "solid-js"
 import { cn } from "../utils"
 
-const Input: Component = (props: ComponentProps<"input">) => {
+const Input = (props: ComponentProps<"input">) => {
   return (
     <input
       class={cn(

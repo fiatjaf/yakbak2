@@ -4,7 +4,7 @@ import { splitProps } from "solid-js"
 import * as DropdownMenuPrimitive from "@kobalte/core/dropdown-menu"
 import type { PolymorphicProps } from "@kobalte/core/polymorphic"
 
-import { cn } from "src/components/utils"
+import { cn } from "../utils"
 
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
 const DropdownMenuPortal = DropdownMenuPrimitive.Portal
@@ -12,7 +12,7 @@ const DropdownMenuSub = DropdownMenuPrimitive.Sub
 const DropdownMenuGroup = DropdownMenuPrimitive.Group
 const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup
 
-const DropdownMenu: Component<DropdownMenuPrimitive.DropdownMenuRootProps> = (props) => {
+const DropdownMenu: Component<DropdownMenuPrimitive.DropdownMenuRootProps> = props => {
   return <DropdownMenuPrimitive.Root gutter={4} {...props} />
 }
 
@@ -58,12 +58,12 @@ const DropdownMenuItem = <T extends ValidComponent = "div">(
   )
 }
 
-const DropdownMenuShortcut: Component<ComponentProps<"span">> = (props) => {
+const DropdownMenuShortcut: Component<ComponentProps<"span">> = props => {
   const [, rest] = splitProps(props, ["class"])
   return <span class={cn("ml-auto text-xs tracking-widest opacity-60", props.class)} {...rest} />
 }
 
-const DropdownMenuLabel: Component<ComponentProps<"div"> & { inset?: boolean }> = (props) => {
+const DropdownMenuLabel: Component<ComponentProps<"div"> & { inset?: boolean }> = props => {
   const [, rest] = splitProps(props, ["class", "inset"])
   return (
     <div

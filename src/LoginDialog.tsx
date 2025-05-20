@@ -1,4 +1,6 @@
-import { Component, createSignal } from "solid-js"
+import { createSignal, Show } from "solid-js"
+import { Shield } from "lucide-solid"
+
 import { Button } from "./components/ui/button"
 import {
   Dialog,
@@ -8,71 +10,21 @@ import {
   DialogTitle
 } from "./components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs"
-import { Shield } from "lucide-solid"
-import { Input } from "./components/ui/Input"
+import { Input } from "./components/ui/input"
+import user from "./user"
 
-function LoginDialog() {
+function LoginDialog(props: {
+  isOpen: boolean
+  onClose: () => void
+  onLogin: () => void
+  onSignup?: () => void
+}) {
   const [isLoading, setIsLoading] = createSignal(false)
   const [nsec, setNsec] = createSignal("")
   const [bunkerUri, setBunkerUri] = createSignal("")
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const login = useLoginActions()
-
-  const handleExtensionLogin = () => {
-    setIsLoading(true)
-    try {
-      if (!("nostr" in window)) {
-        throw new Error("Nostr extension not found. Please install a NIP-07 extension.")
-      }
-      login.extension()
-      onLogin()
-      onClose()
-    } catch (error) {
-      console.error("Extension login failed:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleKeyLogin = () => {
-    if (!nsec().trim()) return
-    setIsLoading(true)
-
-    try {
-      login.nsec(nsec())
-      onLogin()
-      onClose()
-    } catch (error) {
-      console.error("Nsec login failed:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleBunkerLogin = () => {
-    if (!bunkerUri().trim() || !bunkerUri().startsWith("bunker://")) return
-    setIsLoading(true)
-
-    try {
-      login.bunker(bunkerUri())
-      onLogin()
-      onClose()
-    } catch (error) {
-      console.error("Bunker login failed:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleSignupClick = () => {
-    onClose()
-    if (onSignup) {
-      onSignup()
-    }
-  }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={props.isOpen} onOpenChange={props.onClose}>
       <DialogContent class="sm:max-w-md p-0 overflow-hidden rounded-2xl">
         <DialogHeader class="px-6 pt-6 pb-0 relative">
           <DialogTitle class="text-xl font-semibold text-center">Log in</DialogTitle>
@@ -84,7 +36,9 @@ function LoginDialog() {
         <div class="px-6 py-8 space-y-6">
           <Tabs defaultValue={"nostr" in window ? "extension" : "key"} class="w-full">
             <TabsList class="grid grid-cols-3 mb-6">
-              <TabsTrigger value="extension">Extension</TabsTrigger>
+              <Show when={(window as any).nostr}>
+                <TabsTrigger value="extension">Extension</TabsTrigger>
+              </Show>
               <TabsTrigger value="key">nsec</TabsTrigger>
               <TabsTrigger value="bunker">Bunker</TabsTrigger>
             </TabsList>
@@ -150,7 +104,9 @@ function LoginDialog() {
               <Button
                 class="w-full rounded-full py-6"
                 onClick={handleBunkerLogin}
-                disabled={isLoading() || bunkerUri().trim() || !bunkerUri().startsWith("bunker://")}
+                disabled={
+                  isLoading() || !!bunkerUri().trim() || !bunkerUri().startsWith("bunker://")
+                }
               >
                 {isLoading() ? "Connecting..." : "Login with Bunker"}
               </Button>
@@ -169,6 +125,45 @@ function LoginDialog() {
       </DialogContent>
     </Dialog>
   )
+
+  function handleExtensionLogin() {}
+
+  function handleBunkerLogin() {
+    if (!bunkerUri().trim() || !bunkerUri().startsWith("bunker://")) return
+    setIsLoading(true)
+
+    try {
+      login.bunker(bunkerUri())
+      props.onLogin()
+      props.onClose()
+    } catch (error) {
+      console.error("Bunker login failed:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  function handleKeyLogin() {
+    if (!nsec().trim()) return
+    setIsLoading(true)
+
+    try {
+      login.nsec(nsec())
+      props.onLogin()
+      props.onClose()
+    } catch (error) {
+      console.error("Nsec login failed:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  function handleSignupClick() {
+    props.onClose()
+    if (props.onSignup) {
+      props.onSignup()
+    }
+  }
 }
 
-export default LoginDialog as Component
+export default LoginDialog

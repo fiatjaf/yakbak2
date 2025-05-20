@@ -1,6 +1,6 @@
 import { Component } from "solid-js"
 
-function VoiceMessagePage() {
+function VoiceNotePage() {
   const { nevent } = useParams<{ nevent: string }>()
   const { nostr } = useNostr()
   const decoded = nevent ? nip19.decode(nevent) : null

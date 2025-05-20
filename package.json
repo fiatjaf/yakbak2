@@ -12,6 +12,7 @@
     "@kobalte/core": "^0.13.9",
     "@nostr/gadgets": "npm:@jsr/nostr__gadgets@^0.0.21",
     "@nostr/tools": "npm:@jsr/nostr__tools@^2.13.0",
+    "@solid-primitives/intersection-observer": "^2.2.1",
     "@solidjs/router": "^0.15.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
