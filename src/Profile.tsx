@@ -1,5 +1,8 @@
 import { Component } from "solid-js"
 
+import { DialogHeader } from "./components/ui/dialog"
+import { createSignal } from "solid-js"
+
 function Profile() {
   const { npub } = useParams<{ npub: string }>()
   const decoded = npub ? nip19.decode(npub) : null
@@ -11,11 +14,11 @@ function Profile() {
   const { user } = useCurrentUser()
   const { nostr } = useNostr()
   const { mutate: publish } = useNostrPublish()
-  const [isFollowing, setIsFollowing] = useState(false)
+  const [isFollowing, setIsFollowing] = createSignal(false)
   const { sendZap, settings } = useNWC()
-  const [isZapDialogOpen, setIsZapDialogOpen] = useState(false)
-  const [zapAmount, setZapAmount] = useState(1000) // default 1000 sats
-  const [isZapping, setIsZapping] = useState(false)
+  const [isZapDialogOpen, setIsZapDialogOpen] = createSignal(false)
+  const [zapAmount, setZapAmount] = createSignal(1000) // default 1000 sats
+  const [isZapping, setIsZapping] = createSignal(false)
 
   // Query the current user's contact list
   const { data: contactList } = useQuery({
@@ -38,8 +41,8 @@ function Profile() {
 
   if (!pubkey) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <div className="text-center">Invalid profile</div>
+      <div class="container mx-auto px-4 py-8 max-w-2xl">
+        <div class="text-center">Invalid profile</div>
       </div>
     )
   }
@@ -134,17 +137,17 @@ function Profile() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-2xl">
-      <Card className="p-6 mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start space-x-4">
-            <Avatar className="h-20 w-20">
+    <div class="container mx-auto px-4 py-8 max-w-2xl">
+      <Card class="p-6 mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between">
+          <div class="flex items-start space-x-4">
+            <Avatar class="h-20 w-20">
               <AvatarImage src={profileImage} alt={displayName} />
               <AvatarFallback>{displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
-            <div className="flex-1">
-              <div className="flex items-center justify-between gap-2">
-                <h1 className="text-2xl font-bold flex items-center gap-2">
+            <div class="flex-1">
+              <div class="flex items-center justify-between gap-2">
+                <h1 class="text-2xl font-bold flex items-center gap-2">
                   {displayName}
                   <Button size="icon" variant="ghost" onClick={handleCopyPubkey} title="Copy npub">
                     <svg
@@ -155,7 +158,7 @@ function Profile() {
                       viewBox="0 0 24 24"
                       stroke="currentColor"
                       strokeWidth="2"
-                      className="text-primary"
+                      class="text-primary"
                     >
                       <rect x="9" y="9" width="13" height="13" rx="2" />
                       <path d="M5 15V5a2 2 0 0 1 2-2h10" />
@@ -163,7 +166,7 @@ function Profile() {
                   </Button>
                 </h1>
                 {user?.pubkey !== pubkey && (
-                  <div className="flex items-center">
+                  <div class="flex items-center">
                     {isFollowing ? (
                       <Button size="sm" variant="outline" onClick={handleUnfollow}>
                         Unfollow
@@ -176,15 +179,15 @@ function Profile() {
                   </div>
                 )}
               </div>
-              {about && <p className="text-muted-foreground mt-1">{about}</p>}
+              {about && <p class="text-muted-foreground mt-1">{about}</p>}
               {isValidNip05(nip05 || "", pubkey) && (
-                <div className="text-sm text-primary mt-1 flex items-center gap-1">
-                  <span className="inline text-green-600">✅</span> {nip05}
+                <div class="text-sm text-primary mt-1 flex items-center gap-1">
+                  <span class="inline text-green-600">✅</span> {nip05}
                 </div>
               )}
               {lightning && (
                 <div
-                  className="text-sm text-primary mt-1 cursor-pointer hover:underline flex items-center gap-1"
+                  class="text-sm text-primary mt-1 cursor-pointer hover:underline flex items-center gap-1"
                   onClick={() => setIsZapDialogOpen(true)}
                   title="Zap this user"
                 >
@@ -199,7 +202,7 @@ function Profile() {
             <DialogHeader>
               <DialogTitle>Zap {displayName}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
+            <div class="space-y-4">
               <Input
                 type="number"
                 min={1}
@@ -207,12 +210,12 @@ function Profile() {
                 value={zapAmount}
                 onChange={e => setZapAmount(Number(e.target.value))}
                 placeholder="Amount in sats"
-                className="w-full"
+                class="w-full"
               />
               <Button
                 onClick={handleZap}
                 disabled={isZapping || !zapAmount || zapAmount < 1}
-                className="w-full"
+                class="w-full"
               >
                 {isZapping ? "Zapping..." : `Zap ${zapAmount} sats`}
               </Button>
@@ -221,11 +224,11 @@ function Profile() {
         </Dialog>
       </Card>
 
-      <div className="space-y-4">
+      <div class="space-y-4">
         {isLoading ? (
-          <div className="text-center">Loading messages...</div>
+          <div class="text-center">Loading messages...</div>
         ) : messages?.length === 0 ? (
-          <div className="text-center text-muted-foreground">No voice messages yet</div>
+          <div class="text-center text-muted-foreground">No voice messages yet</div>
         ) : (
           messages?.map(message => <VoiceMessagePost key={message.id} message={message} />)
         )}

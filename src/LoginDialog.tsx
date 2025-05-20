@@ -11,7 +11,7 @@ import {
 } from "./components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs"
 import { Input } from "./components/ui/input"
-import user from "./user"
+import { addLogin } from "./user"
 
 function LoginDialog(props: {
   isOpen: boolean
@@ -35,7 +35,7 @@ function LoginDialog(props: {
 
         <div class="px-6 py-8 space-y-6">
           <Tabs defaultValue={"nostr" in window ? "extension" : "key"} class="w-full">
-            <TabsList class="grid grid-cols-3 mb-6">
+            <TabsList class={`grid mb-6 ${(window as any).nostr ? "grid-cols-3" : "grid-cols-2"}`}>
               <Show when={(window as any).nostr}>
                 <TabsTrigger value="extension">Extension</TabsTrigger>
               </Show>
@@ -43,7 +43,7 @@ function LoginDialog(props: {
               <TabsTrigger value="bunker">Bunker</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="extension" class="space-y-4">
+            <TabsContent value="extension" class="space-y-4 min-h-[185px]">
               <div class="text-center p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
                 <Shield class="w-12 h-12 mx-auto mb-3 text-primary" />
                 <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
@@ -59,11 +59,11 @@ function LoginDialog(props: {
               </div>
             </TabsContent>
 
-            <TabsContent value="key" class="space-y-4">
+            <TabsContent value="key" class="space-y-4 min-h-[185px]">
               <div class="space-y-4">
                 <div class="space-y-2">
                   <label for="nsec" class="text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Enter your nsec
+                    Enter your secret key:
                   </label>
                   <Input
                     id="nsec"
@@ -84,10 +84,10 @@ function LoginDialog(props: {
               </div>
             </TabsContent>
 
-            <TabsContent value="bunker" class="space-y-4">
+            <TabsContent value="bunker" class="space-y-4 min-h-[185px]">
               <div class="space-y-2">
                 <label for="bunkerUri" class="text-sm font-medium text-gray-700 dark:text-gray-400">
-                  Bunker URI
+                  Enter your remote signer URI:
                 </label>
                 <Input
                   id="bunkerUri"
@@ -116,8 +116,11 @@ function LoginDialog(props: {
           <div class="text-center text-sm">
             <p class="text-gray-600 dark:text-gray-400">
               Don't have an account?{" "}
-              <button onClick={handleSignupClick} class="text-primary hover:underline font-medium">
-                Sign up
+              <button
+                onClick={handleSignupClick}
+                class="cursor-pointer text-primary hover:underline font-medium"
+              >
+                Create one!
               </button>
             </p>
           </div>
@@ -126,14 +129,24 @@ function LoginDialog(props: {
     </Dialog>
   )
 
-  function handleExtensionLogin() {}
+  function handleExtensionLogin() {
+    try {
+      addLogin("nip07")
+      props.onLogin()
+      props.onClose()
+    } catch (error) {
+      console.error("Bunker login failed:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   function handleBunkerLogin() {
     if (!bunkerUri().trim() || !bunkerUri().startsWith("bunker://")) return
     setIsLoading(true)
 
     try {
-      login.bunker(bunkerUri())
+      addLogin(bunkerUri())
       props.onLogin()
       props.onClose()
     } catch (error) {
@@ -144,11 +157,11 @@ function LoginDialog(props: {
   }
 
   function handleKeyLogin() {
-    if (!nsec().trim()) return
+    if (!nsec().trim() || !nsec().startsWith("nsec1")) return
     setIsLoading(true)
 
     try {
-      login.nsec(nsec())
+      addLogin(nsec())
       props.onLogin()
       props.onClose()
     } catch (error) {

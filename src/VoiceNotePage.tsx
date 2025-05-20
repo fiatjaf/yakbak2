@@ -14,14 +14,14 @@ function VoiceNotePage() {
   const [event] = createResource(nevent, async () => {
     const ptr = decode(nevent).data as EventPointer
     if (ptr.relays) {
-      let res = await pool.querySync(ptr.relays, { ids: [ptr.id] })
+      let res = await pool.querySync(ptr.relays, { ids: [ptr.id] }, { label: "note-1st" })
       if (res.length) return res[0]
     }
     let outboxMinusHint = (await loadRelayList(ptr.author)).items
       .filter(r => r.write && ptr.relays.indexOf(r.url) === -1)
       .slice(0, 4)
       .map(r => r.url)
-    const res = await pool.querySync(outboxMinusHint, { ids: [ptr.id] })
+    const res = await pool.querySync(outboxMinusHint, { ids: [ptr.id] }, { label: "note-2nd" })
     if (res.length === 0) throw new Error(`couldn't find event ${ptr.id}`)
     return res[0]
   })
@@ -35,7 +35,7 @@ function VoiceNotePage() {
       const id = tag[1]
       const hint = tag[2]
       if (hint) {
-        let res = await pool.querySync([hint], { ids: [id] })
+        let res = await pool.querySync([hint], { ids: [id] }, { label: "parent-1st" })
         if (res.length) return res[0]
       }
       const author = tag[3]
@@ -43,7 +43,7 @@ function VoiceNotePage() {
         .filter(r => r.write && r.url !== hint)
         .slice(0, 4)
         .map(r => r.url)
-      const res = await pool.querySync(outboxMinusHint, { ids: [id] })
+      const res = await pool.querySync(outboxMinusHint, { ids: [id] }, { label: "parent-2nd" })
       return res[0] || null
     }
   )
@@ -72,6 +72,7 @@ function VoiceNotePage() {
         limit: 30
       },
       {
+        label: "replies-n",
         onevent(event) {
           if (eosed) {
             setReplies(replies => [event, ...replies])

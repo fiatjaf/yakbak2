@@ -58,7 +58,10 @@ function Feed() {
           globalRelays,
           { kinds: [1222], limit: 100 },
           {
+            label: "global-feed",
             onevent(event) {
+              if (event.tags.find(t => t[0] === "e")) return
+
               events.push(event)
               if (eosed) {
                 setThreads(threads => [{ event, children: [], expanded: false }, ...threads])
@@ -94,11 +97,15 @@ function Feed() {
       const msem = inbox.map(r => getSemaphore(r))
       await Promise.all(msem.map(sem => sem.acquire()))
 
-      const replies = await pool.querySync(inbox, {
-        kinds: [1244],
-        "#e": [parent.id],
-        limit: 30
-      })
+      const replies = await pool.querySync(
+        inbox,
+        {
+          kinds: [1244],
+          "#e": [parent.id],
+          limit: 30
+        },
+        { label: "replies-f" }
+      )
 
       msem.forEach(sem => sem.release())
 
@@ -138,15 +145,15 @@ function Feed() {
 
       <div class="space-y-4">
         <Switch>
-          <Match when={isLoading}>
+          <Match when={isLoading()}>
             <div class="flex justify-center">
               <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
             </div>
           </Match>
-          <Match when={error}>
+          <Match when={error()}>
             <div class="text-center text-red-500">Error loading messages</div>
           </Match>
-          <Match when={!error}>
+          <Match when={true}>
             <For each={threads()}>
               {thread => (
                 <div class="space-y-4">

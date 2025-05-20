@@ -16,29 +16,31 @@ function LoginArea() {
   }
 
   return (
-    <Switch>
-      <Match when={user.current}>
-        <AccountSwitcher onAddAccountClick={() => setLoginDialogOpen(true)} />
-      </Match>
-      <Match when={!user.current}>
-        <Button
-          onClick={() => setLoginDialogOpen(true)}
-          class="flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground w-full font-medium transition-all hover:bg-primary/90 animate-scale-in"
-        >
-          <User class="w-4 h-4" />
-          <span>Log in</span>
-        </Button>
+    <>
+      <Switch>
+        <Match when={user.current}>
+          <AccountSwitcher onAddAccountClick={() => setLoginDialogOpen(true)} />
+        </Match>
+        <Match when={!user.current}>
+          <Button
+            onClick={() => setLoginDialogOpen(true)}
+            class="flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground w-full font-medium transition-all hover:bg-primary/90 animate-scale-in"
+          >
+            <User class="w-4 h-4" />
+            <span>Log in</span>
+          </Button>
 
-        <LoginDialog
-          isOpen={loginDialogOpen()}
-          onClose={() => setLoginDialogOpen(false)}
-          onLogin={handleLogin}
-          onSignup={() => setSignupDialogOpen(true)}
-        />
+          <LoginDialog
+            isOpen={loginDialogOpen()}
+            onClose={() => setLoginDialogOpen(false)}
+            onLogin={handleLogin}
+            onSignup={() => setSignupDialogOpen(true)}
+          />
 
-        <SignupDialog isOpen={signupDialogOpen()} onClose={() => setSignupDialogOpen(false)} />
-      </Match>
-    </Switch>
+          <SignupDialog isOpen={signupDialogOpen()} onClose={() => setSignupDialogOpen(false)} />
+        </Match>
+      </Switch>
+    </>
   )
 }
 

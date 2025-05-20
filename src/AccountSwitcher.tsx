@@ -64,12 +64,6 @@ function AccountSwitcher(props: { onAddAccountClick: () => void }) {
             <span>Settings</span>
           </A>
         </DropdownMenuItem>
-        <DropdownMenuItem>
-          <A href="/about" class="flex items-center gap-2 cursor-pointer p-2 rounded-md">
-            <Info class="w-4 h-4" />
-            <span>About</span>
-          </A>
-        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => removeLogin(user.current.pubkey)}
           class="flex items-center gap-2 cursor-pointer p-2 rounded-md text-red-500"

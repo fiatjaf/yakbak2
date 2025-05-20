@@ -46,10 +46,7 @@ function VoiceNote(props: { event: NostrEvent }) {
   const [reactionCount, setReactionCount] = createSignal(0)
   const [zapAmount, setZapAmount] = createSignal(0)
   const [hasZapped, setHasZapped] = createSignal(false)
-  const [duration, setDuration] = createSignal<number | null>(null)
   let audioRef: HTMLAudioElement | undefined
-  const [hashtags, setHashtags] = createSignal<string[]>([])
-  const [newHashtag, setNewHashtag] = createSignal("")
   const isMessagePage = location.pathname.startsWith("/message/")
   let theirInbox: string[] = []
   let ourOutbox: string[] = []
@@ -69,6 +66,7 @@ function VoiceNote(props: { event: NostrEvent }) {
         "#e": [props.event.id]
       },
       {
+        label: "reactions",
         onevent(event) {
           switch (event.kind) {
             case 9735:
@@ -102,51 +100,8 @@ function VoiceNote(props: { event: NostrEvent }) {
       .map(r => r.url)
   })
 
-  function handleReply() {
-    if (!user) {
-      toast.error("Please log in to reply")
-      return
-    }
-    setIsReplyDialogOpen(true)
-  }
-
-  // Extract hashtags from message tags
-  useEffect(() => {
-    const tags = message.tags.filter(tag => tag[0] === "t")
-    setHashtags(tags.map(tag => tag[1]))
-  }, [message.tags])
-
-  const handleAddHashtag = () => {
-    if (hashtags.length >= 3) {
-      toast.error("Maximum 3 hashtags allowed")
-      return
-    }
-
-    const tag = newHashtag.trim().replace(/^#/, "")
-    if (!tag) return
-
-    if (hashtags.includes(tag)) {
-      toast.error("Hashtag already added")
-      return
-    }
-
-    setHashtags([...hashtags, tag])
-    setNewHashtag("")
-  }
-
-  const handleRemoveHashtag = (tag: string) => {
-    setHashtags(hashtags.filter(t => t !== tag))
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault()
-      handleAddHashtag()
-    }
-  }
-
-  // Detect if this message is a reply
-  const isReply = message.tags.some(tag => tag[0] === "e" && tag[3] === "reply")
+  const hashtags = () => props.event.tags.filter(t => t[0] === "t").map(t => t[1])
+  const isReply = () => !!props.event.tags.find(tag => tag[0] === "e")
 
   return (
     <div
@@ -160,7 +115,7 @@ function VoiceNote(props: { event: NostrEvent }) {
         ) {
           return
         }
-        window.location.href = `/message/${nevent}`
+        navigate(`/message/${nevent}`)
       }}
       class={`block rounded-lg transition-colors ${
         isMessagePage ? "" : "hover:bg-accent/50 cursor-pointer"
@@ -173,11 +128,11 @@ function VoiceNote(props: { event: NostrEvent }) {
               href={`/profile/${npub}`}
               onClick={e => e.stopPropagation()}
               tabIndex={0}
-              aria-label={`View profile of ${displayName}`}
+              aria-label={`View profile of ${author()?.shortName}`}
             >
               <Avatar class="h-10 w-10">
-                <AvatarImage src={profileImage} alt={displayName} />
-                <AvatarFallback>{displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
+                <AvatarImage src={author()?.image} alt="avatar" />
+                <AvatarFallback>{author()?.npub.slice(-2)}</AvatarFallback>
               </Avatar>
             </A>
           </div>
@@ -191,7 +146,7 @@ function VoiceNote(props: { event: NostrEvent }) {
                   aria-label={`View profile of ${author()?.shortName}`}
                   class="font-medium cursor-pointer hover:underline"
                 >
-                  {user.current.shortName}
+                  {author()?.shortName}
                 </A>
                 <span class="text-sm text-muted-foreground">
                   {new Date(props.event.created_at * 1000).toLocaleString()}
@@ -227,7 +182,7 @@ function VoiceNote(props: { event: NostrEvent }) {
                       class="text-destructive focus:text-destructive"
                     >
                       <Trash2 class="mr-2 h-4 w-4" />
-                      Delete Request
+                      Request deletion
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
@@ -239,11 +194,7 @@ function VoiceNote(props: { event: NostrEvent }) {
                 class="w-full"
                 ref={audioRef}
                 src={props.event.content}
-                onLoadedMetadata={() => {
-                  if (audioRef) {
-                    setDuration(audioRef.duration)
-                  }
-                }}
+                preload="metadata"
               >
                 Your browser does not support the audio element.
               </audio>
@@ -252,16 +203,14 @@ function VoiceNote(props: { event: NostrEvent }) {
             {/* Hashtags display */}
             {!isReply && hashtags.length > 0 && (
               <div class="mt-2 flex flex-wrap gap-2">
-                <For each={hashtags}>
+                <For each={hashtags()}>
                   {tag => (
                     <A
                       href={`/hashtag/${tag}`}
                       onClick={e => e.stopPropagation()}
                       class="no-underline"
                     >
-                      <Badge variant="secondary" class="hover:bg-accent">
-                        #{tag}
-                      </Badge>
+                      <Badge class="hover:bg-accent">#{tag}</Badge>
                     </A>
                   )}
                 </For>
@@ -273,15 +222,15 @@ function VoiceNote(props: { event: NostrEvent }) {
                 variant="ghost"
                 size="sm"
                 onClick={handleReaction}
-                class={hasReacted ? "text-red-500 hover:text-red-600" : ""}
+                class={hasReacted() ? "text-red-500 hover:text-red-600" : ""}
               >
-                <Heart class={`h-5 w-5 ${hasReacted ? "fill-current" : ""}`} />
+                <Heart class={`h-5 w-5 ${hasReacted() ? "fill-current" : ""}`} />
                 <Show when={reactionCount() > 0}>
                   <span class="ml-1 text-sm">{reactionCount()}</span>
                 </Show>
               </Button>
               <Button variant="ghost" size="sm" onClick={handleZap}>
-                <Zap class={`h-5 w-5 ${hasZapped ? "text-yellow-500 fill-current" : ""}`} />
+                <Zap class={`h-5 w-5 ${hasZapped() ? "text-yellow-500 fill-current" : ""}`} />
                 <Show when={zapAmount() > 0}>
                   <span class="ml-1 text-sm">{formatZapAmount(Math.round(zapAmount()))}</span>
                 </Show>
@@ -313,54 +262,37 @@ function VoiceNote(props: { event: NostrEvent }) {
     </div>
   )
 
-  function handleDelete() {
-    if (!user.current) {
-      toast.error("Please log in to delete messages")
-      return
-    }
+  async function handleDelete() {
+    let ourOutbox = (await loadRelayList(user.current.pubkey)).items
+      .filter(r => r.write)
+      .slice(0, 4)
+      .map(r => r.url)
 
-    if (user.current?.pubkey !== props.event.pubkey) {
-      toast.error("You can only delete your own messages")
-      return
-    }
-
-    publishEvent(
-      {
+    let res = pool.publish(
+      ourOutbox,
+      await user.current.signer.signEvent({
+        created_at: Math.round(Date.now() / 1000),
         kind: 5,
         content: "",
-        tags: [["e", message.id]]
-      },
-      {
-        onSuccess: () => {
-          // Remove the message from the feed
-          queryClient.setQueryData<QueryData>(["voiceMessages", "global"], oldData => {
-            if (!oldData) return oldData
-            const updatedPages = oldData.pages.map(page =>
-              page.filter(msg => msg.id !== message.id)
-            )
-            return { ...oldData, pages: updatedPages }
-          })
-
-          queryClient.setQueryData<QueryData>(["voiceMessages", "following"], oldData => {
-            if (!oldData) return oldData
-            const updatedPages = oldData.pages.map(page =>
-              page.filter(msg => msg.id !== message.id)
-            )
-            return { ...oldData, pages: updatedPages }
-          })
-
-          setIsDeleteDialogOpen(false)
-          toast.success("Message deleted")
-        }
-      }
+        tags: [["e", props.event.id]]
+      })
     )
+
+    try {
+      await Promise.any(res)
+      toast.success("Message deleted")
+    } catch (err) {
+      toast.error(`Failed to delete: ${err}`)
+    }
+
+    setIsDeleteDialogOpen(false)
   }
 
   async function handleReaction() {
     try {
       if (hasReacted) {
-        // Find the user's reaction event and delete
-        const userReactions = await pool.querySync(inbox, [
+        // find the user's reaction event and delete
+        const userReactions = await pool.querySync(theirInbox, [
           {
             kinds: [7],
             authors: [user.pubkey],

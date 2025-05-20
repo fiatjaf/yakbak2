@@ -7,7 +7,7 @@ function Navigation() {
     <nav class="border-b">
       <div class="container mx-auto px-4 h-16 flex items-center justify-between">
         <A href="/" class="flex items-center space-x-2">
-          <img src="/yakbak-logo.png" alt="YakBak Logo" class="h-8 w-auto" />
+          <img src="/favicon.ico" alt="YakBak Logo" class="h-8 w-auto" />
           <span class="text-xl font-bold">YakBak2</span>
         </A>
 
