@@ -1,7 +1,16 @@
 import { decode, EventPointer } from "@nostr/tools/nip19"
 import { NostrEvent } from "@nostr/tools/pure"
 import { useParams } from "@solidjs/router"
-import { createResource, createEffect, createSignal, For, onCleanup, Show } from "solid-js"
+import {
+  createResource,
+  createEffect,
+  createSignal,
+  For,
+  onCleanup,
+  Show,
+  Switch,
+  Match
+} from "solid-js"
 import { pool } from "@nostr/gadgets/global"
 import { loadRelayList } from "@nostr/gadgets/lists"
 import { SubCloser } from "@nostr/tools/abstract-pool"
@@ -11,6 +20,7 @@ import { Card } from "./components/ui/card"
 
 function VoiceNotePage() {
   const { nevent } = useParams<{ nevent: string }>()
+
   const [event] = createResource(nevent, async () => {
     const ptr = decode(nevent).data as EventPointer
     if (ptr.relays) {
@@ -94,69 +104,64 @@ function VoiceNotePage() {
     if (closer) closer.close()
   })
 
-  if (event.error) {
-    return (
-      <div class="container mx-auto px-4 py-8 max-w-2xl">
-        <div class="text-center">Invalid message</div>
-      </div>
-    )
-  }
-
-  if (event.loading) {
-    return (
-      <div class="container mx-auto px-4 py-8 max-w-2xl">
-        <div class="flex justify-center">
-          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
-        </div>
-      </div>
-    )
-  }
-
-  if (!event()) {
-    return (
-      <div class="container mx-auto px-4 py-8 max-w-2xl">
-        <div class="text-center">Message not found</div>
-      </div>
-    )
-  }
-
   return (
-    <div class="container mx-auto px-4 py-8 max-w-2xl">
-      {/* Show root message if this is a reply */}
-      <Show when={root()}>
-        <div class="mb-2">
-          <Card class="p-4 border-2 border-primary/40 bg-muted/50">
-            <VoiceNote event={root()} />
-          </Card>
+    <Switch>
+      <Match when={event.error}>
+        <div class="container mx-auto px-4 py-8 max-w-2xl">
+          <div class="text-center">Invalid message</div>
         </div>
-      </Show>
-      {/* If root is shown, nest the current message visually */}
-      <div class={root() ? "ml-6 border-l-2 border-primary/30 pl-4" : ""}>
-        <Show when={root()}>
-          <div class="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wide">
-            Reply
+      </Match>
+      <Match when={event.loading}>
+        <div class="container mx-auto px-4 py-8 max-w-2xl">
+          <div class="flex justify-center">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
           </div>
-        </Show>
-        <VoiceNote event={event()} />
-      </div>
-      <div>
-        <h2 class="text-lg font-semibold mb-2">{root() ? "Replies to this reply" : "Replies"}</h2>
-        <Show when={replies().length > 0}>
-          <div class="space-y-4">
-            <For each={replies()}>
-              {reply => (
-                <div class="ml-6 border-l-2 border-primary/20 pl-4">
-                  <div class="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wide">
-                    Reply
-                  </div>
-                  <VoiceNote event={reply} />
-                </div>
-              )}
-            </For>
+        </div>
+      </Match>
+      <Match when={!event()}>
+        <div class="container mx-auto px-4 py-8 max-w-2xl">
+          <div class="text-center">Message not found</div>
+        </div>
+      </Match>
+      <Match when={true}>
+        <div class="container mx-auto px-4 py-8 max-w-2xl">
+          {/* Show root message if this is a reply */}
+          <Show when={root()}>
+            <div class="mb-2">
+              <Card class="p-4 border-2 border-primary/40 bg-muted/50">
+                <VoiceNote event={root()} />
+              </Card>
+            </div>
+          </Show>
+          {/* If root is shown, nest the current message visually */}
+          <div class={root() ? "ml-6 border-l-2 border-primary/30 pl-4" : ""}>
+            <Show when={root()}>
+              <div class="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wide">
+                Reply
+              </div>
+            </Show>
+            <VoiceNote event={event()} />
           </div>
-        </Show>
-      </div>
-    </div>
+          <Show when={replies()?.length > 0}>
+            <h2 class="text-lg font-semibold mb-2">Replies</h2>
+            <Show when={replies().length > 0}>
+              <div class="space-y-4">
+                <For each={replies()}>
+                  {reply => (
+                    <div class="ml-6 border-l-2 border-primary/20 pl-4">
+                      <div class="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wide">
+                        Reply
+                      </div>
+                      <VoiceNote event={reply} />
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </Show>
+        </div>
+      </Match>
+    </Switch>
   )
 }
 

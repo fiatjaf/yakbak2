@@ -5,7 +5,7 @@ import { NostrEvent } from "@nostr/tools/pure"
 import { neventEncode, npubEncode } from "@nostr/tools/nip19"
 import { onMount, createResource, createSignal, onCleanup, For, Show, createEffect } from "solid-js"
 import { toast } from "solid-sonner"
-import { A, useNavigate } from "@solidjs/router"
+import { A, useLocation, useNavigate } from "@solidjs/router"
 import { Badge, Copy, Heart, MoreVertical, Share2, Trash2, Zap } from "lucide-solid"
 import { pool } from "@nostr/gadgets/global"
 import { loadRelayList } from "@nostr/gadgets/lists"
@@ -41,18 +41,20 @@ function VoiceNote(props: { event: NostrEvent }) {
   const nevent = neventEncode({
     id: props.event.id,
     author: props.event.pubkey,
-    relays: []
+    relays: Array.from(pool.seenOn.get(props.event.id)).map(r => r.url)
   })
   const npub = npubEncode(props.event.pubkey)
   const navigate = useNavigate()
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = createSignal(false)
   const [hasReacted, setHasReacted] = createSignal(false)
-  // const { sendZap, settings } = useNWC()
   const [reactionCount, setReactionCount] = createSignal(0)
   const [zapAmount, setZapAmount] = createSignal(0)
   const [hasZapped, setHasZapped] = createSignal(false)
   let audioRef: HTMLAudioElement | undefined
-  const isMessagePage = location.pathname.startsWith("/message/")
+
+  const location = useLocation()
+  const isMessagePage = location.pathname.startsWith("/nevent1")
+
   let theirInbox: string[] = []
   let ourOutbox: string[] = []
   const [zapEndpoint] = createResource(author, async author => {
@@ -185,7 +187,7 @@ function VoiceNote(props: { event: NostrEvent }) {
                     ) {
                       return
                     }
-                    navigate(`/message/${nevent}`)
+                    navigate(`/${nevent}`)
                   }}
                 >
                   {new Date(props.event.created_at * 1000).toLocaleString()}
@@ -414,7 +416,7 @@ function VoiceNote(props: { event: NostrEvent }) {
 
   async function handleShareURL() {
     try {
-      const url = `${window.location.origin}/message/${nevent}`
+      const url = `${window.location.origin}/${nevent}`
       await navigator.clipboard.writeText(url)
       toast.success("URL copied to clipboard")
     } catch (error) {
