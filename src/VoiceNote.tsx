@@ -34,6 +34,7 @@ import { formatZapAmount, getSatoshisAmountFromBolt11 } from "./utils"
 import { Avatar, AvatarFallback, AvatarImage } from "./components/ui/avatar"
 import settings from "./settings"
 import nwc from "./nwc"
+import Create from "./Create"
 
 function VoiceNote(props: { event: NostrEvent }) {
   const [author] = createResource(props.event.pubkey, loadNostrUser)
@@ -144,23 +145,7 @@ function VoiceNote(props: { event: NostrEvent }) {
   const isReply = () => !!props.event.tags.find(tag => tag[0] === "e")
 
   return (
-    <div
-      onClick={e => {
-        if (
-          isMessagePage ||
-          (e.target instanceof HTMLElement &&
-            (e.target.closest("button") ||
-              e.target.closest("a") ||
-              e.target.closest('[role="menu"]')))
-        ) {
-          return
-        }
-        navigate(`/message/${nevent}`)
-      }}
-      class={`block rounded-lg transition-colors ${
-        isMessagePage ? "" : "hover:bg-accent/50 cursor-pointer"
-      }`}
-    >
+    <div class={`block rounded-lg transition-colors hover:bg-accent/50 cursor-pointer`}>
       <Card class="p-4">
         <div class="flex items-start space-x-4">
           <div class="flex-shrink-0">
@@ -178,55 +163,69 @@ function VoiceNote(props: { event: NostrEvent }) {
           </div>
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between">
-              <div class="flex items-center space-x-2">
-                <A
-                  href={`/profile/${npub}`}
-                  onClick={e => e.stopPropagation()}
-                  tabIndex={0}
-                  aria-label={`View profile of ${author()?.shortName}`}
-                  class="font-medium cursor-pointer hover:underline"
+              <A
+                href={`/profile/${npub}`}
+                onClick={e => e.stopPropagation()}
+                tabIndex={0}
+                aria-label={`View profile of ${author()?.shortName}`}
+                class="font-medium cursor-pointer hover:underline"
+              >
+                {author()?.shortName}
+              </A>
+              <div class="flex items-center gap-2">
+                <span
+                  class="text-sm text-muted-foreground hover:underline"
+                  onClick={e => {
+                    if (
+                      isMessagePage ||
+                      (e.target instanceof HTMLElement &&
+                        (e.target.closest("button") ||
+                          e.target.closest("a") ||
+                          e.target.closest('[role="menu"]')))
+                    ) {
+                      return
+                    }
+                    navigate(`/message/${nevent}`)
+                  }}
                 >
-                  {author()?.shortName}
-                </A>
-                <span class="text-sm text-muted-foreground">
                   {new Date(props.event.created_at * 1000).toLocaleString()}
                 </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger>
+                    <Button variant="ghost" size="icon" class="h-8 w-8">
+                      <MoreVertical class="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    {nevent && (
+                      <DropdownMenuItem
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(nevent)
+                          toast.success("nevent copied to clipboard")
+                        }}
+                      >
+                        <Copy class="mr-2 h-4 w-4" />
+                        Copy nevent
+                      </DropdownMenuItem>
+                    )}
+                    {nevent && (
+                      <DropdownMenuItem onClick={handleShareURL}>
+                        <Share2 class="mr-2 h-4 w-4" />
+                        Share URL
+                      </DropdownMenuItem>
+                    )}
+                    {user().current?.pubkey === props.event.pubkey && (
+                      <DropdownMenuItem
+                        onClick={() => setIsDeleteDialogOpen(true)}
+                        class="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 class="mr-2 h-4 w-4" />
+                        Request deletion
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger>
-                  <Button variant="ghost" size="icon" class="h-8 w-8">
-                    <MoreVertical class="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  {nevent && (
-                    <DropdownMenuItem
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(nevent)
-                        toast.success("nevent copied to clipboard")
-                      }}
-                    >
-                      <Copy class="mr-2 h-4 w-4" />
-                      Copy nevent
-                    </DropdownMenuItem>
-                  )}
-                  {nevent && (
-                    <DropdownMenuItem onClick={handleShareURL}>
-                      <Share2 class="mr-2 h-4 w-4" />
-                      Share URL
-                    </DropdownMenuItem>
-                  )}
-                  {user().current?.pubkey === props.event.pubkey && (
-                    <DropdownMenuItem
-                      onClick={() => setIsDeleteDialogOpen(true)}
-                      class="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 class="mr-2 h-4 w-4" />
-                      Request deletion
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
             <div class="mt-2">
               <audio
@@ -258,13 +257,11 @@ function VoiceNote(props: { event: NostrEvent }) {
             )}
 
             <div class="mt-4 flex items-center flex-wrap gap-6">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleReaction}
-                class={hasReacted() ? "text-red-500 hover:text-red-600" : ""}
-              >
-                <Heart class={`h-5 w-5 ${hasReacted() ? "fill-current" : ""}`} />
+              <Show when={user()?.current}>
+                <Create replyingTo={props.event} />
+              </Show>
+              <Button variant="ghost" size="sm" onClick={handleReaction}>
+                <Heart class={`h-5 w-5 ${hasReacted() ? "fill-current text-red-500" : ""}`} />
                 <Show when={reactionCount() > 0}>
                   <span class="ml-1 text-sm">{reactionCount()}</span>
                 </Show>
