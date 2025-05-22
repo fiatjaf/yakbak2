@@ -152,7 +152,7 @@ function VoiceNote(props: { event: NostrEvent }) {
         <div class="flex items-start space-x-4">
           <div class="flex-shrink-0">
             <A
-              href={`/profile/${npub}`}
+              href={`/${npub}`}
               onClick={e => e.stopPropagation()}
               tabIndex={0}
               aria-label={`View profile of ${author()?.shortName}`}
@@ -166,7 +166,7 @@ function VoiceNote(props: { event: NostrEvent }) {
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between">
               <A
-                href={`/profile/${npub}`}
+                href={`/${npub}`}
                 onClick={e => e.stopPropagation()}
                 tabIndex={0}
                 aria-label={`View profile of ${author()?.shortName}`}

@@ -1,4 +1,4 @@
-import { Component, createEffect, createSignal, For, Match, onCleanup, Switch } from "solid-js"
+import { createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { Globe, Telescope, User, Users } from "lucide-solid"
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer"
 import { NostrEvent } from "@nostr/tools/pure"
@@ -19,11 +19,11 @@ const global: DefinedTab = [
   }
 ]
 
-function Feed() {
-  const [tab, setTab] = createSignal<DefinedTab>(global)
-  const [visibleTabs, setVisibleTabs] = createSignal<[string, Tab][]>([global])
+function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) {
+  const [tab, setTab] = createSignal<DefinedTab>(props.forcedTabs ? props.forcedTabs[0] : global)
   const [notes, setNotes] = createSignal<NostrEvent[]>([])
   const [isLoading, setLoading] = createSignal(false)
+  const [visibleTabs, setVisibleTabs] = createSignal<[string, Tab][]>(props.forcedTabs ?? [global])
 
   let ref: HTMLDivElement | undefined
   let closer: SubCloser
@@ -41,8 +41,8 @@ function Feed() {
 
     if (closer) closer.close()
 
-    let eosed = true
     const requestMap = await getRequestDeclaration(selected[1], [{ kinds: [1222] }])
+    let eosed = true
     let events: NostrEvent[] = []
     closer = pool.subscribeMap(requestMap, {
       label: `feed-${selected[0]}`,
@@ -70,48 +70,48 @@ function Feed() {
   })
 
   createEffect(async () => {
+    if (props.forcedTabs) return
+
     if (user()?.current) {
       const follows = await loadFollowsList(user().current.pubkey)
-      setVisibleTabs(vt => [
-        vt[0],
-        ["Following", { type: "users", pubkeys: follows.items }],
-        ...vt.slice(2)
-      ])
+      setVisibleTabs([global, ["Following", { type: "users", pubkeys: follows.items }]])
     } else {
-      setVisibleTabs(vt => [vt[0], ...vt.slice(2)])
+      setVisibleTabs([global])
     }
   })
 
   return (
     <div class="space-y-4">
-      <div class="flex justify-center -mt-6 mb-2">
-        <ToggleGroup
-          value={tab()[0]}
-          onChange={(value: string) => value && setTab(visibleTabs().find(vt => vt[0] === value))}
-        >
-          <For each={visibleTabs()}>
-            {dt => (
-              <ToggleGroupItem value={dt[0]} aria-label={dt[0]}>
-                <Switch>
-                  <Match when={dt[0] === "Global"}>
-                    <Globe class="h-4 w-4 mr-2" />
-                  </Match>
-                  <Match when={dt[1].type === "users" && dt[1].pubkeys.length === 1}>
-                    <User class="h-4 w-4 mr-2" />
-                  </Match>
-                  <Match when={dt[1].type === "users" && dt[1].pubkeys.length > 1}>
-                    <Users class="h-4 w-4 mr-2" />
-                  </Match>
-                  <Match when={dt[1].type === "relays"}>
-                    <Telescope class="h-4 w-4 mr-2" />
-                  </Match>
-                </Switch>
-                {dt[0]}
-              </ToggleGroupItem>
-            )}
-          </For>
-        </ToggleGroup>
-      </div>
+      <Show when={!props.invisibleToggles}>
+        <div class="flex justify-center -mt-6 mb-2">
+          <ToggleGroup
+            value={tab()[0]}
+            onChange={(value: string) => value && setTab(visibleTabs().find(vt => vt[0] === value))}
+          >
+            <For each={visibleTabs()}>
+              {dt => (
+                <ToggleGroupItem value={dt[0]} aria-label={dt[0]}>
+                  <Switch>
+                    <Match when={dt[0] === "Global"}>
+                      <Globe class="h-4 w-4 mr-2" />
+                    </Match>
+                    <Match when={dt[1].type === "users" && dt[1].pubkeys.length === 1}>
+                      <User class="h-4 w-4 mr-2" />
+                    </Match>
+                    <Match when={dt[1].type === "users" && dt[1].pubkeys.length > 1}>
+                      <Users class="h-4 w-4 mr-2" />
+                    </Match>
+                    <Match when={dt[1].type === "relays"}>
+                      <Telescope class="h-4 w-4 mr-2" />
+                    </Match>
+                  </Switch>
+                  {dt[0]}
+                </ToggleGroupItem>
+              )}
+            </For>
+          </ToggleGroup>
+        </div>
+      </Show>
 
       <div class="space-y-4">
         <Switch>
@@ -153,4 +153,4 @@ function Feed() {
   )
 }
 
-export default Feed as Component
+export default Feed

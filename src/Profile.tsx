@@ -1,240 +1,160 @@
-import { Component } from "solid-js"
+import { useParams } from "@solidjs/router"
+import { decode } from "@nostr/tools/nip19"
+import { createEffect, createResource, createSignal, Match, Show, Switch } from "solid-js"
+import { loadNostrUser } from "@nostr/gadgets/metadata"
+import { toast } from "solid-sonner"
 
-import { DialogHeader } from "./components/ui/dialog"
-import { createSignal } from "solid-js"
+import Feed from "./Feed"
+import { DefinedTab } from "./nostr"
+import { Card } from "./components/ui/card"
+import { Avatar, AvatarFallback, AvatarImage } from "./components/ui/avatar"
+import { Button } from "./components/ui/button"
+import user from "./user"
+import { isValid, Nip05 } from "@nostr/tools/nip05"
+import { loadFollowsList, loadRelayList } from "@nostr/gadgets/lists"
+import { EventTemplate } from "@nostr/tools"
+import { pool } from "@nostr/gadgets/global"
+import { Check, Copy } from "lucide-solid"
 
 function Profile() {
   const { npub } = useParams<{ npub: string }>()
-  const decoded = npub ? nip19.decode(npub) : null
-  const pubkey = decoded?.type === "npub" ? decoded.data : null
-
-  const author = useAuthor(pubkey || "")
-  const metadata = author.data?.metadata
-  const { data: messages, isLoading } = useUserVoiceMessages(pubkey || "")
-  const { user } = useCurrentUser()
-  const { nostr } = useNostr()
-  const { mutate: publish } = useNostrPublish()
+  const [author] = createResource(npub, async npub => {
+    const { type, data } = decode(npub)
+    if (type === "npub") {
+      return loadNostrUser(data)
+    } else if (type === "nprofile") {
+      return loadNostrUser(data.pubkey)
+    } else {
+      throw new Error(`unexpected profile ${npub}`)
+    }
+  })
+  const [validNIP05] = createResource(
+    author,
+    async a => a.metadata?.nip05 && (await isValid(a.pubkey, a.metadata.nip05 as Nip05))
+  )
   const [isFollowing, setIsFollowing] = createSignal(false)
-  const { sendZap, settings } = useNWC()
-  const [isZapDialogOpen, setIsZapDialogOpen] = createSignal(false)
-  const [zapAmount, setZapAmount] = createSignal(1000) // default 1000 sats
-  const [isZapping, setIsZapping] = createSignal(false)
-
-  // Query the current user's contact list
-  const { data: contactList } = useQuery({
-    queryKey: ["contacts", user?.pubkey],
-    queryFn: async () => {
-      if (!user?.pubkey) return null
-      const events = await nostr.query([{ kinds: [3], authors: [user.pubkey] }])
-      return events[0] // Get the most recent contact list
-    },
-    enabled: !!user?.pubkey
+  createEffect(async () => {
+    if (!user() || !user().current || !author()) return
+    const follows = await loadFollowsList(user().current.pubkey)
+    setIsFollowing(follows.items.some(pk => pk === author().pubkey))
   })
 
-  // Update isFollowing state when contact list changes
-  useEffect(() => {
-    if (contactList && pubkey) {
-      const tags = contactList.tags || []
-      setIsFollowing(tags.some(tag => tag[0] === "p" && tag[1] === pubkey))
-    }
-  }, [contactList, pubkey])
+  return (
+    <Switch>
+      <Match when={author.loading}>
+        <div class="flex justify-center mt-12">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+        </div>
+      </Match>
+      <Match when={author()}>
+        <div class="container mx-auto px-4 py-8 max-w-2xl">
+          <Card class="p-6 mb-8">
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between">
+              <div class="flex items-start space-x-4">
+                <Avatar class="h-20 w-20">
+                  <AvatarImage src={author().image} alt="Avatar" />
+                  <AvatarFallback>{author().npub.slice(-2)}</AvatarFallback>
+                </Avatar>
+                <div class="flex-1">
+                  <div class="flex items-center justify-between gap-2">
+                    <h1 class="text-2xl font-bold flex items-center gap-2">
+                      {author().shortName}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(author().npub)
+                          toast.success("npub copied to clipboard")
+                        }}
+                        title="Copy npub"
+                      >
+                        <Copy />
+                      </Button>
+                    </h1>
+                    <Show
+                      when={user()?.current?.pubkey && user().current.pubkey !== author().pubkey}
+                    >
+                      <div class="flex items-center">
+                        <Button size="sm" variant="outline" onClick={handleFollowUnfollow}>
+                          {isFollowing() ? "Unfollow" : "Follow"}
+                        </Button>
+                      </div>
+                    </Show>
+                  </div>
+                  <p class="text-muted-foreground mt-1">{author().metadata.about}</p>
+                  <Show when={validNIP05()}>
+                    <div class="text-sm text-primary mt-1 flex items-center gap-1">
+                      <span class="inline text-green-600">
+                        <Check />
+                      </span>{" "}
+                      {author().metadata.nip05}
+                    </div>
+                  </Show>
+                </div>
+              </div>
+            </div>
+          </Card>
 
-  if (!pubkey) {
-    return (
-      <div class="container mx-auto px-4 py-8 max-w-2xl">
-        <div class="text-center">Invalid profile</div>
-      </div>
-    )
-  }
+          <Feed
+            forcedTabs={[
+              [author().shortName, { type: "users", pubkeys: [author().pubkey] }] as DefinedTab
+            ]}
+            invisibleToggles
+          />
+        </div>
+      </Match>
+    </Switch>
+  )
 
-  const displayName = metadata?.name || pubkey.slice(0, 8)
-  const profileImage = metadata?.picture
-  const about = metadata?.about
-  const nip05 = metadata?.nip05
-  const lightning = metadata?.lud16 || metadata?.lud06
-
-  const npubStr = nip19.npubEncode(pubkey)
-
-  const handleCopyPubkey = async () => {
-    await navigator.clipboard.writeText(npubStr)
-    toast.success("npub copied to clipboard")
-  }
-
-  const handleFollow = async () => {
-    if (!user?.pubkey || !pubkey) return
-
-    // Get current contact list tags
-    const currentTags = contactList?.tags || []
-
-    // Add new pubkey to tags if not already present
-    if (!currentTags.some(tag => tag[0] === "p" && tag[1] === pubkey)) {
-      const newTags = [...currentTags, ["p", pubkey]]
-
-      // Publish new contact list
-      publish(
-        {
-          kind: 3,
-          content: contactList?.content || "",
-          tags: newTags
-        },
-        {
-          onSuccess: () => {
-            setIsFollowing(true)
-            toast.success("Followed user")
-          },
-          onError: () => {
-            toast.error("Failed to follow user")
-          }
-        }
-      )
-    }
-  }
-
-  const handleUnfollow = async () => {
-    if (!user?.pubkey || !pubkey) return
-
-    // Get current contact list tags
-    const currentTags = contactList?.tags || []
-
-    // Remove pubkey from tags
-    const newTags = currentTags.filter(tag => !(tag[0] === "p" && tag[1] === pubkey))
-
-    // Publish new contact list
-    publish(
-      {
-        kind: 3,
-        content: contactList?.content || "",
-        tags: newTags
-      },
-      {
-        onSuccess: () => {
-          setIsFollowing(false)
-          toast.success("Unfollowed user")
-        },
-        onError: () => {
-          toast.error("Failed to unfollow user")
-        }
-      }
-    )
-  }
-
-  const handleZap = async () => {
-    if (!lightning) return
-    if (!settings?.nwcConnectionString) {
-      toast.error("Please set up Nostr Wallet Connect in settings")
+  async function handleFollowUnfollow() {
+    const follows = await loadFollowsList(user().current.pubkey, [], true)
+    if (!follows.event) {
+      toast.error("Couldn't find your follow list")
       return
     }
-    setIsZapping(true)
+
     try {
-      await sendZap(lightning, zapAmount)
-      toast.success(`Zapped ${zapAmount} sats!`)
-      setIsZapDialogOpen(false)
-    } catch (e) {
-      toast.error("Failed to zap")
-    } finally {
-      setIsZapping(false)
+      let update: EventTemplate | undefined
+      let successMessage: string
+      let newState = isFollowing()
+      if (!isFollowing()) {
+        // we're supposed to follow
+        if (!follows.items.some(pk => pk === author().pubkey)) {
+          update = {
+            ...follows.event,
+            created_at: Math.round(Date.now() / 1000),
+            tags: [...follows.event.tags, ["p", author().pubkey]]
+          }
+        }
+        successMessage = `Followed ${author().shortName}`
+        newState = true
+      } else {
+        // we're supposed to unfollow
+        if (follows.items.some(pk => pk === author().pubkey)) {
+          update = {
+            ...follows.event,
+            created_at: Math.round(Date.now() / 1000),
+            tags: follows.event.tags.filter(tag => tag[1] !== author().pubkey)
+          }
+        }
+        successMessage = `Unfollowed ${author().shortName}`
+        newState = false
+      }
+
+      if (update) {
+        const outbox = (await loadRelayList(user().current.pubkey)).items
+          .filter(r => r.write)
+          .slice(0, 4)
+          .map(r => r.url)
+        await Promise.any(pool.publish(outbox, await user().current.signer.signEvent(update)))
+        toast.success(successMessage)
+        setIsFollowing(newState)
+      }
+    } catch (err) {
+      console.error("Failed to update follow list:", err)
+      toast.error("Failed to update follow list")
     }
   }
-
-  return (
-    <div class="container mx-auto px-4 py-8 max-w-2xl">
-      <Card class="p-6 mb-8">
-        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between">
-          <div class="flex items-start space-x-4">
-            <Avatar class="h-20 w-20">
-              <AvatarImage src={profileImage} alt={displayName} />
-              <AvatarFallback>{displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <div class="flex-1">
-              <div class="flex items-center justify-between gap-2">
-                <h1 class="text-2xl font-bold flex items-center gap-2">
-                  {displayName}
-                  <Button size="icon" variant="ghost" onClick={handleCopyPubkey} title="Copy npub">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      class="text-primary"
-                    >
-                      <rect x="9" y="9" width="13" height="13" rx="2" />
-                      <path d="M5 15V5a2 2 0 0 1 2-2h10" />
-                    </svg>
-                  </Button>
-                </h1>
-                {user?.pubkey !== pubkey && (
-                  <div class="flex items-center">
-                    {isFollowing ? (
-                      <Button size="sm" variant="outline" onClick={handleUnfollow}>
-                        Unfollow
-                      </Button>
-                    ) : (
-                      <Button size="sm" onClick={handleFollow}>
-                        Follow
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </div>
-              {about && <p class="text-muted-foreground mt-1">{about}</p>}
-              {isValidNip05(nip05 || "", pubkey) && (
-                <div class="text-sm text-primary mt-1 flex items-center gap-1">
-                  <span class="inline text-green-600">✅</span> {nip05}
-                </div>
-              )}
-              {lightning && (
-                <div
-                  class="text-sm text-primary mt-1 cursor-pointer hover:underline flex items-center gap-1"
-                  onClick={() => setIsZapDialogOpen(true)}
-                  title="Zap this user"
-                >
-                  ⚡ {lightning}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        <Dialog open={isZapDialogOpen} onOpenChange={setIsZapDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Zap {displayName}</DialogTitle>
-            </DialogHeader>
-            <div class="space-y-4">
-              <Input
-                type="number"
-                min={1}
-                step={1}
-                value={zapAmount}
-                onChange={e => setZapAmount(Number(e.target.value))}
-                placeholder="Amount in sats"
-                class="w-full"
-              />
-              <Button
-                onClick={handleZap}
-                disabled={isZapping || !zapAmount || zapAmount < 1}
-                class="w-full"
-              >
-                {isZapping ? "Zapping..." : `Zap ${zapAmount} sats`}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </Card>
-
-      <div class="space-y-4">
-        {isLoading ? (
-          <div class="text-center">Loading messages...</div>
-        ) : messages?.length === 0 ? (
-          <div class="text-center text-muted-foreground">No voice messages yet</div>
-        ) : (
-          messages?.map(message => <VoiceMessagePost key={message.id} message={message} />)
-        )}
-      </div>
-    </div>
-  )
 }
 
-export default Profile as Component
+export default Profile

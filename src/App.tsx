@@ -24,7 +24,7 @@ function App() {
         )}
       >
         <Route path="/" component={Home} />
-        <Route path="/:npub" matchFilters={{ npub: /^npub1/ }} component={Profile} />
+        <Route path="/:npub" matchFilters={{ npub: /^(npub|nprofile)1/ }} component={Profile} />
         <Route path="/:nevent" matchFilters={{ nevent: /^nevent1/ }} component={VoiceNotePage} />
         <Route path="/settings" component={Settings} />
       </Router>
