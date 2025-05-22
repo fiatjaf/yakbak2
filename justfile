@@ -5,3 +5,6 @@ dev:
 
 build:
   vite build
+
+deploy: build
+  netlify deploy dist/ --prod
