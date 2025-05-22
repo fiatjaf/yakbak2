@@ -74,8 +74,6 @@ async function createAuthorizationEvent(
     created_at: now
   })
 
-  // Debug log the event
-  console.log("Authorization event:", JSON.stringify(event, null, 2))
   return event
 }
 
@@ -95,22 +93,15 @@ export async function uploadToBlossom(
     throw new Error("No valid blossom servers available")
   }
 
-  // Calculate SHA256 hash of the blob
   const sha256 = await calculateSHA256(blob)
-  console.log("Blob SHA256:", sha256)
-
-  // Create and sign the authorization event
   const authEvent = await createAuthorizationEvent("upload", sha256)
-
-  // Base64 encode the authorization event
   const authHeader = `Nostr ${btoa(JSON.stringify(authEvent))}`
-  console.log("Authorization header:", authHeader)
 
   // Try each server in sequence until one succeeds
   for (const server of validServers) {
     try {
       const uploadUrl = new URL("/upload", server.url).toString()
-      console.log("Attempting upload to:", uploadUrl)
+      console.log("attempting upload to:", uploadUrl)
 
       // Upload the blob
       const response = await fetch(uploadUrl, {
@@ -130,7 +121,7 @@ export async function uploadToBlossom(
       if (!response.ok) {
         const reason = response.headers.get("X-Reason")
         console.log(
-          `Upload failed with status ${response.status}${
+          `upload failed with status ${response.status}${
             reason ? ` - ${reason}` : ""
           } for ${uploadUrl}`
         )
@@ -178,8 +169,6 @@ export async function getBlossomServers(pubkey: string): Promise<BlossomServer[]
     authors: [pubkey],
     limit: 1
   })
-
-  console.log("Found blossom events:", blossomEvents) // Debug log
 
   // If no blossom servers are found, return the default server
   if (!blossomEvents.length) {

@@ -10,6 +10,7 @@ import { Badge, Copy, Heart, MoreVertical, Share2, Trash2, Zap } from "lucide-so
 import { pool } from "@nostr/gadgets/global"
 import { loadRelayList } from "@nostr/gadgets/lists"
 import { SubCloser } from "@nostr/tools/abstract-pool"
+import { matchEventPubkey } from "@nostr/tools/fakejson"
 
 import { Button } from "./components/ui/button"
 import {
@@ -32,7 +33,7 @@ import user from "./user"
 import { formatZapAmount, getSatoshisAmountFromBolt11 } from "./utils"
 import { Avatar, AvatarFallback, AvatarImage } from "./components/ui/avatar"
 import settings from "./settings"
-import { payInvoice } from "./nwc"
+import nwc from "./nwc"
 
 function VoiceNote(props: { event: NostrEvent }) {
   const [author] = createResource(props.event.pubkey, loadNostrUser)
@@ -101,7 +102,13 @@ function VoiceNote(props: { event: NostrEvent }) {
             case 9735:
               const amt = getSatoshisAmountFromBolt11(event.tags.find(t => t[0] === "bolt11")[1])
               setZapAmount(curr => curr + amt)
-              if (user().current && event.pubkey === user().current.pubkey) {
+              if (
+                user().current &&
+                matchEventPubkey(
+                  event.tags.find(t => t[0] === "description")[1],
+                  user().current.pubkey
+                )
+              ) {
                 setHasZapped(true)
                 break
               }
@@ -327,7 +334,7 @@ function VoiceNote(props: { event: NostrEvent }) {
     const reactionTargets = [...theirInbox, ...ourOutbox]
 
     try {
-      if (hasReacted) {
+      if (hasReacted()) {
         // find the user's reaction event and delete
         const userReactions = await pool.querySync(theirInbox, {
           kinds: [7],
@@ -363,7 +370,8 @@ function VoiceNote(props: { event: NostrEvent }) {
             ]
           })
         )
-        toast.success("Reaction sent")
+        toast.success("Like sent")
+        setHasReacted(true)
       }
     } catch (error) {
       console.error("Error toggling reaction:", error)
@@ -379,7 +387,7 @@ function VoiceNote(props: { event: NostrEvent }) {
       makeZapRequest({
         profile: props.event.pubkey,
         event: props.event.id,
-        amount: settings().defaultZapAmount,
+        amount: settings().defaultZapAmount * 1000,
         relays: [...theirInbox, ...ourOutbox],
         comment: ""
       })
@@ -390,13 +398,21 @@ function VoiceNote(props: { event: NostrEvent }) {
         cb +
           (cb.includes("?") ? "&" : "?") +
           "amount=" +
-          settings().defaultZapAmount +
+          settings().defaultZapAmount * 1000 +
           "&nostr=" +
           JSON.stringify(zr)
       )
     ).json()
 
-    payInvoice(invoice)
+    try {
+      const amount = getSatoshisAmountFromBolt11(invoice)
+      await nwc().payInvoice({ invoice })
+      toast.success(`Sent ${amount} sats!`)
+      setHasZapped(true)
+    } catch (error) {
+      console.error("Error sending zap:", error)
+      toast.error("Failed to send zap")
+    }
   }
 
   async function handleShareURL() {

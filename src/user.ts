@@ -72,10 +72,11 @@ async function makeUserLogin(data: string): Promise<User> {
     signer = bunker
   } else {
     const res = decode(data)
-    pubkey = getPublicKey(res.data as Uint8Array)
+    const sk = res.data as Uint8Array
+    pubkey = getPublicKey(sk)
     signer = {
       signEvent(event) {
-        return finalizeEvent(event)
+        return finalizeEvent(event, sk)
       }
     }
   }
