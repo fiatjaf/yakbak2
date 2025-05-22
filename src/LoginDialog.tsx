@@ -9,9 +9,10 @@ import {
   DialogHeader,
   DialogTitle
 } from "./components/ui/dialog"
+import { Label } from "./components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs"
 import { Input } from "./components/ui/input"
-import { addLogin } from "./user"
+import user, { addLogin } from "./user"
 
 function LoginDialog(props: {
   isOpen: boolean
@@ -22,6 +23,7 @@ function LoginDialog(props: {
   const [isLoading, setIsLoading] = createSignal(false)
   const [nsec, setNsec] = createSignal("")
   const [bunkerUri, setBunkerUri] = createSignal("")
+  const showExtension = () => (window as any).nostr && !user().all.find(u => u._method === "nip07")
 
   return (
     <Dialog open={props.isOpen} onOpenChange={props.onClose}>
@@ -35,8 +37,8 @@ function LoginDialog(props: {
 
         <div class="px-6 py-8 space-y-6">
           <Tabs defaultValue={"nostr" in window ? "extension" : "key"} class="w-full">
-            <TabsList class={`grid mb-6 ${(window as any).nostr ? "grid-cols-3" : "grid-cols-2"}`}>
-              <Show when={(window as any).nostr}>
+            <TabsList class={`grid mb-6 ${showExtension() ? "grid-cols-3" : "grid-cols-2"}`}>
+              <Show when={showExtension()}>
                 <TabsTrigger value="extension">Extension</TabsTrigger>
               </Show>
               <TabsTrigger value="key">nsec</TabsTrigger>
@@ -62,9 +64,9 @@ function LoginDialog(props: {
             <TabsContent value="key" class="space-y-4 min-h-[185px]">
               <div class="space-y-4">
                 <div class="space-y-2">
-                  <label for="nsec" class="text-sm font-medium text-gray-700 dark:text-gray-400">
+                  <Label for="nsec" class="text-sm font-medium text-gray-700 dark:text-gray-400">
                     Enter your secret key:
-                  </label>
+                  </Label>
                   <Input
                     id="nsec"
                     value={nsec()}
@@ -86,9 +88,9 @@ function LoginDialog(props: {
 
             <TabsContent value="bunker" class="space-y-4 min-h-[185px]">
               <div class="space-y-2">
-                <label for="bunkerUri" class="text-sm font-medium text-gray-700 dark:text-gray-400">
+                <Label for="bunkerUri" class="text-sm font-medium text-gray-700 dark:text-gray-400">
                   Enter your remote signer URI:
-                </label>
+                </Label>
                 <Input
                   id="bunkerUri"
                   value={bunkerUri()}

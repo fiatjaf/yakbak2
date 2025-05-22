@@ -1,9 +1,3 @@
-export function formatTime(seconds: number) {
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins}:${secs.toString().padStart(2, "0")}`
-}
-
 export function formatZapAmount(amount: number): string {
   if (amount < 1000) {
     return amount.toString()

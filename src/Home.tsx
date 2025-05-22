@@ -8,7 +8,7 @@ function Home() {
   return (
     <div class="container mx-auto px-4 py-8 max-w-2xl">
       <Feed />
-      <Show when={user.current}>
+      <Show when={user().current}>
         <Create />
       </Show>
     </div>

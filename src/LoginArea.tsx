@@ -1,9 +1,10 @@
 import { Component, createSignal, Match, Switch } from "solid-js"
+import { User } from "lucide-solid"
+
 import AccountSwitcher from "./AccountSwitcher"
 import user from "./user"
 import { Button } from "./components/ui/button"
 import LoginDialog from "./LoginDialog"
-import { User } from "lucide-solid"
 import SignupDialog from "./SignupDialog"
 
 function LoginArea() {
@@ -18,10 +19,10 @@ function LoginArea() {
   return (
     <>
       <Switch>
-        <Match when={user.current}>
+        <Match when={user().current}>
           <AccountSwitcher onAddAccountClick={() => setLoginDialogOpen(true)} />
         </Match>
-        <Match when={!user.current}>
+        <Match when={!user().current}>
           <Button
             onClick={() => setLoginDialogOpen(true)}
             class="flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground w-full font-medium transition-all hover:bg-primary/90 animate-scale-in"
@@ -29,17 +30,15 @@ function LoginArea() {
             <User class="w-4 h-4" />
             <span>Log in</span>
           </Button>
-
-          <LoginDialog
-            isOpen={loginDialogOpen()}
-            onClose={() => setLoginDialogOpen(false)}
-            onLogin={handleLogin}
-            onSignup={() => setSignupDialogOpen(true)}
-          />
-
-          <SignupDialog isOpen={signupDialogOpen()} onClose={() => setSignupDialogOpen(false)} />
         </Match>
       </Switch>
+      <LoginDialog
+        isOpen={loginDialogOpen()}
+        onClose={() => setLoginDialogOpen(false)}
+        onLogin={handleLogin}
+        onSignup={() => setSignupDialogOpen(true)}
+      />
+      <SignupDialog isOpen={signupDialogOpen()} onClose={() => setSignupDialogOpen(false)} />
     </>
   )
 }

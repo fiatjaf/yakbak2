@@ -1,6 +1,7 @@
 import { loadNostrUser, NostrUser } from "@nostr/gadgets/metadata"
 import { decode } from "@nostr/tools/nip19"
 import { BunkerSigner, parseBunkerInput } from "@nostr/tools/nip46"
+import { createSignal } from "solid-js"
 import {
   EventTemplate,
   finalizeEvent,
@@ -8,13 +9,12 @@ import {
   getPublicKey,
   NostrEvent
 } from "@nostr/tools/pure"
-import { createStore } from "solid-js/store"
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils"
 
 type User = NostrUser & { signer: Signer } & { _method: string }
 type Signer = { signEvent: (event: EventTemplate) => Promise<NostrEvent> }
 
-const [user, set] = createStore<{
+const [user, set] = createSignal<{
   current: User | null
   all: User[]
 }>({
@@ -25,27 +25,28 @@ const [user, set] = createStore<{
 export default user
 
 export function setLogin(pubkey: string) {
-  set(
-    "current",
-    user.all.find(u => u.pubkey === pubkey)
-  )
+  set(user => ({
+    ...user,
+    current: user.all.find(u => u.pubkey === pubkey)
+  }))
   storeState()
 }
 
 export function removeLogin(pubkey: string) {
-  set(
-    "all",
-    user.all.filter(u => u.pubkey !== pubkey)
-  )
+  set(user => ({
+    ...user,
+    all: user.all.filter(u => u.pubkey !== pubkey)
+  }))
   storeState()
 }
 
 export async function addLogin(data: string) {
   const newUser = await makeUserLogin(data)
 
-  set("all", [...user.all, newUser])
-  set("current", newUser)
-
+  set(user => ({
+    all: [...user.all, newUser],
+    current: newUser
+  }))
   storeState()
 }
 
@@ -84,17 +85,17 @@ async function makeUserLogin(data: string): Promise<User> {
 }
 
 function storeState() {
-  localStorage.setItem("nostr:logins", JSON.stringify(user.all.map(u => u._method)))
-  localStorage.setItem("nostr:current", user.current.pubkey)
+  localStorage.setItem("nostr:logins", JSON.stringify(user().all.map(u => u._method)))
+  localStorage.setItem("nostr:current", user().current.pubkey)
 }
 
 ;(async function initialLoad() {
   await new Promise(resolve => setTimeout(resolve, 200))
 
-  const logins = JSON.parse(localStorage.getItem("nostr:logins")) as string[]
+  const logins = JSON.parse(localStorage.getItem("nostr:logins") || "[]") as string[]
   const users = await Promise.all(logins.map(data => makeUserLogin(data)))
-  set("all", users)
 
   const current = localStorage.getItem("nostr:current")
-  setLogin(current)
+
+  set({ all: users, current: users.find(u => u.pubkey === current) })
 })()

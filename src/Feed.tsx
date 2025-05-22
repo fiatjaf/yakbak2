@@ -125,7 +125,7 @@ function Feed() {
 
   return (
     <div class="space-y-4">
-      <Show when={!!user.current}>
+      <Show when={!!user().current}>
         <div class="flex justify-center -mt-6 mb-2">
           <ToggleGroup
             value={tab()}

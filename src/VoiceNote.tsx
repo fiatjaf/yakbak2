@@ -1,7 +1,9 @@
+import { bech32 } from "@scure/base"
 import { loadNostrUser } from "@nostr/gadgets/metadata"
+import { makeZapRequest } from "@nostr/tools/nip57"
 import { NostrEvent } from "@nostr/tools/pure"
 import { neventEncode, npubEncode } from "@nostr/tools/nip19"
-import { onMount, createResource, createSignal, onCleanup, For, createEffect } from "solid-js"
+import { onMount, createResource, createSignal, onCleanup, For, Show, createEffect } from "solid-js"
 import { toast } from "solid-sonner"
 import { A, useNavigate } from "@solidjs/router"
 import { Badge, Copy, Heart, MoreVertical, Share2, Trash2, Zap } from "lucide-solid"
@@ -28,8 +30,9 @@ import {
 
 import user from "./user"
 import { formatZapAmount, getSatoshisAmountFromBolt11 } from "./utils"
-import { Show } from "solid-js"
 import { Avatar, AvatarFallback, AvatarImage } from "./components/ui/avatar"
+import settings from "./settings"
+import { payInvoice } from "./nwc"
 
 function VoiceNote(props: { event: NostrEvent }) {
   const [author] = createResource(props.event.pubkey, loadNostrUser)
@@ -50,6 +53,32 @@ function VoiceNote(props: { event: NostrEvent }) {
   const isMessagePage = location.pathname.startsWith("/message/")
   let theirInbox: string[] = []
   let ourOutbox: string[] = []
+  const [zapEndpoint] = createResource(author, async author => {
+    const metadata = author.metadata
+    if (!metadata) return undefined
+
+    const { lud06, lud16 } = metadata
+    let lnurl: string
+    if (lud06) {
+      let { words } = bech32.decode(lud06, 1000)
+      let data = bech32.fromWords(words)
+      lnurl = new TextDecoder().decode(data)
+    } else if (lud16) {
+      let [name, domain] = lud16.split("@")
+      lnurl = new URL(`/.well-known/lnurlp/${name}`, `https://${domain}`).toString()
+    } else {
+      return undefined
+    }
+
+    let res = await fetch(lnurl)
+    let body = await res.json()
+
+    if (body.allowsNostr && body.nostrPubkey) {
+      return body.callback
+    }
+
+    return undefined
+  })
 
   // Check if the current user has reacted to this message and get reaction count
   let closer: SubCloser
@@ -72,10 +101,14 @@ function VoiceNote(props: { event: NostrEvent }) {
             case 9735:
               const amt = getSatoshisAmountFromBolt11(event.tags.find(t => t[0] === "bolt11")[1])
               setZapAmount(curr => curr + amt)
+              if (user().current && event.pubkey === user().current.pubkey) {
+                setHasZapped(true)
+                break
+              }
               break
             case 7:
               setReactionCount(curr => curr + 1)
-              if (user.current && event.pubkey === user.current.pubkey) {
+              if (user().current && event.pubkey === user().current.pubkey) {
                 setHasReacted(true)
                 break
               }
@@ -92,9 +125,9 @@ function VoiceNote(props: { event: NostrEvent }) {
   })
 
   createEffect(async () => {
-    if (!user.current) return
+    if (!user().current) return
 
-    ourOutbox = (await loadRelayList(user.current.pubkey)).items
+    ourOutbox = (await loadRelayList(user().current.pubkey)).items
       .filter(r => r.write)
       .slice(0, 4)
       .map(r => r.url)
@@ -176,7 +209,7 @@ function VoiceNote(props: { event: NostrEvent }) {
                       Share URL
                     </DropdownMenuItem>
                   )}
-                  {user.current?.pubkey === props.event.pubkey && (
+                  {user().current?.pubkey === props.event.pubkey && (
                     <DropdownMenuItem
                       onClick={() => setIsDeleteDialogOpen(true)}
                       class="text-destructive focus:text-destructive"
@@ -229,12 +262,14 @@ function VoiceNote(props: { event: NostrEvent }) {
                   <span class="ml-1 text-sm">{reactionCount()}</span>
                 </Show>
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleZap}>
-                <Zap class={`h-5 w-5 ${hasZapped() ? "text-yellow-500 fill-current" : ""}`} />
-                <Show when={zapAmount() > 0}>
-                  <span class="ml-1 text-sm">{formatZapAmount(Math.round(zapAmount()))}</span>
-                </Show>
-              </Button>
+              <Show when={zapEndpoint() && settings().defaultZapAmount}>
+                <Button variant="ghost" size="sm" onClick={handleZap}>
+                  <Zap class={`h-5 w-5 ${hasZapped() ? "text-yellow-500 fill-current" : ""}`} />
+                  <Show when={zapAmount() > 0}>
+                    <span class="ml-1 text-sm">{formatZapAmount(Math.round(zapAmount()))}</span>
+                  </Show>
+                </Button>
+              </Show>
             </div>
 
             <Dialog open={isDeleteDialogOpen()} onOpenChange={setIsDeleteDialogOpen}>
@@ -263,14 +298,14 @@ function VoiceNote(props: { event: NostrEvent }) {
   )
 
   async function handleDelete() {
-    let ourOutbox = (await loadRelayList(user.current.pubkey)).items
+    let ourOutbox = (await loadRelayList(user().current.pubkey)).items
       .filter(r => r.write)
       .slice(0, 4)
       .map(r => r.url)
 
     let res = pool.publish(
       ourOutbox,
-      await user.current.signer.signEvent({
+      await user().current.signer.signEvent({
         created_at: Math.round(Date.now() / 1000),
         kind: 5,
         content: "",
@@ -289,53 +324,46 @@ function VoiceNote(props: { event: NostrEvent }) {
   }
 
   async function handleReaction() {
+    const reactionTargets = [...theirInbox, ...ourOutbox]
+
     try {
       if (hasReacted) {
         // find the user's reaction event and delete
-        const userReactions = await pool.querySync(theirInbox, [
-          {
-            kinds: [7],
-            authors: [user.pubkey],
-            "#e": [message.id]
-          }
-        ])
+        const userReactions = await pool.querySync(theirInbox, {
+          kinds: [7],
+          authors: [user().current.pubkey],
+          "#e": [props.event.id]
+        })
 
         if (userReactions.length > 0) {
-          // Delete the reaction
-          publishEvent(
-            {
+          pool.publish(
+            reactionTargets,
+            await user().current.signer.signEvent({
+              created_at: Math.round(Date.now() / 1000),
               kind: 5,
               content: "",
               tags: [["e", userReactions[0].id]]
-            },
-            {
-              onSuccess: () => {
-                setHasReacted(false)
-                setReactionCount(prev => Math.max(0, prev - 1))
-                toast.success("Reaction removed")
-              }
-            }
+            })
           )
+          setHasReacted(false)
+          setReactionCount(prev => Math.max(0, prev - 1))
+          toast.success("Reaction removed")
         }
       } else {
-        // Add new reaction
-        publishEvent(
-          {
+        // add new reaction
+        pool.publish(
+          reactionTargets,
+          await user().current.signer.signEvent({
+            created_at: Math.round(Date.now() / 1000),
             kind: 7,
             content: "+",
             tags: [
-              ["e", message.id],
-              ["p", message.pubkey]
+              ["e", props.event.id],
+              ["p", props.event.pubkey]
             ]
-          },
-          {
-            onSuccess: () => {
-              setHasReacted(true)
-              setReactionCount(prev => prev + 1)
-              toast.success("Reaction sent")
-            }
-          }
+          })
         )
+        toast.success("Reaction sent")
       }
     } catch (error) {
       console.error("Error toggling reaction:", error)
@@ -344,94 +372,31 @@ function VoiceNote(props: { event: NostrEvent }) {
   }
 
   async function handleZap() {
-    if (!settings?.nwcConnectionString) {
-      toast.error("Please set up Nostr Wallet Connect in settings")
-      return
-    }
+    const cb = zapEndpoint()
+    if (!cb) return
 
-    try {
-      // Get the author's metadata to find their lightning address
-      const authorMetadata = await nostr.query([
-        {
-          kinds: [0],
-          authors: [message.pubkey]
-        }
-      ])
+    const zr = await user().current.signer.signEvent(
+      makeZapRequest({
+        profile: props.event.pubkey,
+        event: props.event.id,
+        amount: settings().defaultZapAmount,
+        relays: [...theirInbox, ...ourOutbox],
+        comment: ""
+      })
+    )
 
-      const metadata = authorMetadata[0]?.content ? JSON.parse(authorMetadata[0].content) : null
-      const lightningAddress = metadata?.lud16
-
-      if (!lightningAddress) {
-        toast.error("Author has not set up a lightning address")
-        return
-      }
-
-      // Create a zap request event
-      const zapRequest = {
-        kind: 9734,
-        content: "",
-        tags: [
-          ["p", message.pubkey],
-          ["e", message.id],
-          ["amount", (settings.defaultZapAmount * 1000).toString()], // Convert to msats
-          ["relays", ...Array.from(nostr.relays.keys())]
-        ]
-      }
-
-      // Publish the zap request
-      await publishEvent(zapRequest)
-
-      // Send the actual zap
-      await sendZap(lightningAddress, settings.defaultZapAmount)
-      setHasZapped(true)
-
-      // Wait a bit for the zap receipt to be published
-      await new Promise(resolve => setTimeout(resolve, 2000))
-
-      // Query for zap events with a longer timeout
-      const zapEvents = await nostr.query(
-        [
-          {
-            kinds: [9734, 9735],
-            "#e": [message.id]
-          }
-        ],
-        { signal: AbortSignal.timeout(5000) }
+    const { pr: invoice } = await (
+      await fetch(
+        cb +
+          (cb.includes("?") ? "&" : "?") +
+          "amount=" +
+          settings().defaultZapAmount +
+          "&nostr=" +
+          JSON.stringify(zr)
       )
+    ).json()
 
-      const totalZaps = zapEvents.reduce((sum, event) => {
-        // For zap requests (9734), look for amount in the amount tag
-        if (event.kind === 9734) {
-          const amountTag = event.tags.find(tag => tag[0] === "amount")?.[1]
-          if (amountTag) {
-            const amount = parseInt(amountTag) / 1000 // Convert msats to sats
-            return sum + amount
-          }
-        }
-
-        // For zap receipts (9735), look for amount in the description tag
-        if (event.kind === 9735) {
-          const zapReceipt = event.tags.find(t => tag[0] === "description")?.[1]
-          if (!zapReceipt) return sum
-
-          try {
-            const receipt = JSON.parse(zapReceipt)
-            const amount = receipt.amount
-            if (amount) {
-              return sum + amount / 1000
-            }
-          } catch (e) {
-            console.error("Error parsing zap receipt:", e)
-          }
-        }
-        return sum
-      }, 0)
-
-      setZapAmount(Math.round(totalZaps))
-    } catch (error) {
-      console.error("Error sending zap:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to send zap")
-    }
+    payInvoice(invoice)
   }
 
   async function handleShareURL() {

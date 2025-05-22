@@ -9,6 +9,7 @@
     "vite-plugin-solid": "^2.11.6"
   },
   "dependencies": {
+    "@getalby/sdk": "^5.0.0",
     "@henrygd/semaphore": "npm:@jsr/henrygd__semaphore@^0.0.2",
     "@kobalte/core": "^0.13.9",
     "@nostr/gadgets": "npm:@jsr/nostr__gadgets@^0.0.21",

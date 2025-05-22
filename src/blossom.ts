@@ -53,9 +53,6 @@ async function calculateSHA256(blob: Blob): Promise<string> {
 
 async function createAuthorizationEvent(
   verb: "get" | "upload" | "list" | "delete",
-  content: string,
-  pubkey: string,
-  signer: { signEvent: (event: Partial<NostrEvent>) => Promise<NostrEvent> },
   sha256?: string,
   expirationHours: number = 24
 ): Promise<NostrEvent> {
@@ -70,12 +67,11 @@ async function createAuthorizationEvent(
     tags.push(["x", sha256])
   }
 
-  const event = await signer.signEvent({
+  const event = await user().current.signer.signEvent({
     kind: 24242,
-    content,
+    content: "",
     tags,
-    created_at: now,
-    pubkey
+    created_at: now
   })
 
   // Debug log the event
@@ -85,9 +81,7 @@ async function createAuthorizationEvent(
 
 export async function uploadToBlossom(
   blob: Blob,
-  servers: BlossomServer[] = [DEFAULT_BLOSSOM_SERVER],
-  userPubkey?: string,
-  signer?: { signEvent: (event: Partial<NostrEvent>) => Promise<NostrEvent> }
+  servers: BlossomServer[] = [DEFAULT_BLOSSOM_SERVER]
 ): Promise<string> {
   // Filter out invalid URLs and ensure we have at least one valid server
   const validServers = servers
@@ -101,26 +95,12 @@ export async function uploadToBlossom(
     throw new Error("No valid blossom servers available")
   }
 
-  if (!userPubkey) {
-    throw new Error("User pubkey is required for upload authorization")
-  }
-
-  if (!signer) {
-    throw new Error("Signer is required for upload authorization")
-  }
-
   // Calculate SHA256 hash of the blob
   const sha256 = await calculateSHA256(blob)
   console.log("Blob SHA256:", sha256)
 
   // Create and sign the authorization event
-  const authEvent = await createAuthorizationEvent(
-    "upload",
-    `Upload voice-message.webm`,
-    userPubkey,
-    signer,
-    sha256
-  )
+  const authEvent = await createAuthorizationEvent("upload", sha256)
 
   // Base64 encode the authorization event
   const authHeader = `Nostr ${btoa(JSON.stringify(authEvent))}`
@@ -188,7 +168,7 @@ export async function uploadToBlossom(
 }
 
 export async function getBlossomServers(pubkey: string): Promise<BlossomServer[]> {
-  const outbox = (await loadRelayList(user.current.pubkey)).items
+  const outbox = (await loadRelayList(user().current.pubkey)).items
     .filter(r => r.write)
     .slice(0, 6)
     .map(r => r.url)
