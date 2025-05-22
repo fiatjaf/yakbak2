@@ -26,17 +26,21 @@ export default user
 
 export function setLogin(pubkey: string) {
   set(user => ({
-    ...user,
-    current: user.all.find(u => u.pubkey === pubkey)
+    current: user.all.find(u => u.pubkey === pubkey),
+    ...user
   }))
   storeState()
 }
 
 export function removeLogin(pubkey: string) {
-  set(user => ({
-    ...user,
-    all: user.all.filter(u => u.pubkey !== pubkey)
-  }))
+  set(user => {
+    const all = user.all.filter(u => u.pubkey !== pubkey)
+    let current = user.current
+    if (current?.pubkey === pubkey) {
+      current = all[0]
+    }
+    return { all, current }
+  })
   storeState()
 }
 
@@ -86,8 +90,14 @@ async function makeUserLogin(data: string): Promise<User> {
 }
 
 function storeState() {
-  localStorage.setItem("nostr:logins", JSON.stringify(user().all.map(u => u._method)))
-  localStorage.setItem("nostr:current", user().current.pubkey)
+  const u = user()
+  if (u?.current) {
+    localStorage.setItem("nostr:current", u.current.pubkey)
+    localStorage.setItem("nostr:logins", JSON.stringify(u.all.map(u => u._method)))
+  } else {
+    localStorage.removeItem("nostr:current")
+    localStorage.removeItem("nostr:logins")
+  }
 }
 
 ;(async function initialLoad() {

@@ -1,120 +1,66 @@
-import {
-  Component,
-  createEffect,
-  createSignal,
-  For,
-  Match,
-  onCleanup,
-  onMount,
-  Show,
-  Switch
-} from "solid-js"
-import { ChevronDown, ChevronUp, Globe, Users } from "lucide-solid"
+import { Component, createEffect, createSignal, For, Match, onCleanup, Switch } from "solid-js"
+import { Globe, Telescope, User, Users } from "lucide-solid"
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer"
 import { NostrEvent } from "@nostr/tools/pure"
 import { pool } from "@nostr/gadgets/global"
+import { loadFollowsList } from "@nostr/gadgets/lists"
 import { SubCloser } from "@nostr/tools/abstract-pool"
-import { loadRelayList } from "@nostr/gadgets/lists"
-import { getSemaphore } from "@henrygd/semaphore"
 
-import { Button } from "./components/ui/button"
 import VoiceNote from "./VoiceNote"
 import user from "./user"
 import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group"
+import { DefinedTab, getRequestDeclaration, Tab } from "./nostr"
 
-type TabName = "global" | "following"
-
-type Thread = { event: NostrEvent; children: Thread[]; expanded: boolean }
-
-const globalRelays = [
-  "wss://relay.damus.io",
-  "wss://nos.lol",
-  "wss://nostr.wine",
-  "wss://relay.nostr.band"
+const global: DefinedTab = [
+  "Global",
+  {
+    type: "relays",
+    relays: ["wss://relay.damus.io", "wss://nos.lol", "wss://nostr.wine", "wss://relay.nostr.band"]
+  }
 ]
 
 function Feed() {
-  const [tab, setTab] = createSignal<TabName>("global")
-  const [threads, setThreads] = createSignal<Thread[]>([])
-  const [error, setError] = createSignal<null | string>(null)
+  const [tab, setTab] = createSignal<DefinedTab>(global)
+  const [visibleTabs, setVisibleTabs] = createSignal<[string, Tab][]>([global])
+  const [notes, setNotes] = createSignal<NostrEvent[]>([])
   const [isLoading, setLoading] = createSignal(false)
 
   let ref: HTMLDivElement | undefined
   let closer: SubCloser
-  let events: NostrEvent[] = []
   const visible = createVisibilityObserver({ threshold: 1 })(() => ref)
 
   onCleanup(() => {
     if (closer) closer.close()
   })
-  onMount(() => {
-    console.log("starting subscription")
+
+  createEffect(async () => {
+    const selected = tab()
+    console.log("starting subscription", selected)
     setLoading(true)
+    setNotes([])
+
+    if (closer) closer.close()
 
     let eosed = true
-    switch (tab()) {
-      case "global": {
-        closer = pool.subscribe(
-          globalRelays,
-          { kinds: [1222], limit: 100 },
-          {
-            label: "global-feed",
-            onevent(event) {
-              if (event.tags.find(t => t[0] === "e")) return
+    const requestMap = await getRequestDeclaration(selected[1], [{ kinds: [1222] }])
+    let events: NostrEvent[] = []
+    closer = pool.subscribeMap(requestMap, {
+      label: `feed-${selected[0]}`,
+      onevent(event) {
+        if (event.tags.find(t => t[0] === "e")) return
 
-              events.push(event)
-              if (eosed) {
-                setThreads(threads => [{ event, children: [], expanded: false }, ...threads])
-                loadReplies(event)
-              }
-            },
-            oneose() {
-              eosed = true
-              events.sort((a, b) => b.created_at - a.created_at)
-              setThreads(
-                events.map(event => {
-                  loadReplies(event)
-                  return { event, children: [], expanded: false }
-                })
-              )
-              setLoading(false)
-            }
-          }
-        )
-        break
+        events.push(event)
+        if (eosed) {
+          setNotes(events => [event, ...events])
+        }
+      },
+      oneose() {
+        eosed = true
+        events.sort((a, b) => b.created_at - a.created_at)
+        setNotes(events)
+        setLoading(false)
       }
-      case "following": {
-        break
-      }
-    }
-
-    async function loadReplies(parent: NostrEvent) {
-      const inbox = (await loadRelayList(parent.pubkey)).items
-        .filter(r => r.read)
-        .slice(0, 4)
-        .map(r => r.url)
-
-      const msem = inbox.map(r => getSemaphore(r))
-      await Promise.all(msem.map(sem => sem.acquire()))
-
-      const replies = await pool.querySync(
-        inbox,
-        {
-          kinds: [1244],
-          "#e": [parent.id],
-          limit: 30
-        },
-        { label: "replies-f" }
-      )
-
-      msem.forEach(sem => sem.release())
-
-      setThreads(threads => {
-        let idx = threads.findIndex(thread => thread.event === parent)
-        threads[idx].children = replies.map(event => ({ event, children: [], expanded: false }))
-        return threads
-      })
-    }
+    })
   })
 
   createEffect(() => {
@@ -123,75 +69,62 @@ function Feed() {
     }
   })
 
+  createEffect(async () => {
+    if (user()?.current) {
+      const follows = await loadFollowsList(user().current.pubkey)
+      setVisibleTabs(vt => [
+        vt[0],
+        ["Following", { type: "users", pubkeys: follows.items }],
+        ...vt.slice(2)
+      ])
+    } else {
+      setVisibleTabs(vt => [vt[0], ...vt.slice(2)])
+    }
+  })
+
   return (
     <div class="space-y-4">
-      <Show when={!!user().current}>
-        <div class="flex justify-center -mt-6 mb-2">
-          <ToggleGroup
-            value={tab()}
-            onChange={(value: string) => value && setTab(value as TabName)}
-          >
-            <ToggleGroupItem value="global" aria-label="Global feed">
-              <Globe class="h-4 w-4 mr-2" />
-              Global
-            </ToggleGroupItem>
-            <ToggleGroupItem value="following" aria-label="Following feed">
-              <Users class="h-4 w-4 mr-2" />
-              Following
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-      </Show>
+      <div class="flex justify-center -mt-6 mb-2">
+        <ToggleGroup
+          value={tab()[0]}
+          onChange={(value: string) => value && setTab(visibleTabs().find(vt => vt[0] === value))}
+        >
+          <For each={visibleTabs()}>
+            {dt => (
+              <ToggleGroupItem value={dt[0]} aria-label={dt[0]}>
+                <Switch>
+                  <Match when={dt[0] === "Global"}>
+                    <Globe class="h-4 w-4 mr-2" />
+                  </Match>
+                  <Match when={dt[1].type === "users" && dt[1].pubkeys.length === 1}>
+                    <User class="h-4 w-4 mr-2" />
+                  </Match>
+                  <Match when={dt[1].type === "users" && dt[1].pubkeys.length > 1}>
+                    <Users class="h-4 w-4 mr-2" />
+                  </Match>
+                  <Match when={dt[1].type === "relays"}>
+                    <Telescope class="h-4 w-4 mr-2" />
+                  </Match>
+                </Switch>
+                {dt[0]}
+              </ToggleGroupItem>
+            )}
+          </For>
+        </ToggleGroup>
+      </div>
 
       <div class="space-y-4">
         <Switch>
           <Match when={isLoading()}>
-            <div class="flex justify-center">
+            <div class="flex justify-center mt-12">
               <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
             </div>
           </Match>
-          <Match when={error()}>
-            <div class="text-center text-red-500">Error loading messages</div>
-          </Match>
           <Match when={true}>
-            <For each={threads()}>
-              {thread => (
+            <For each={notes()}>
+              {note => (
                 <div class="space-y-4">
-                  <VoiceNote event={thread.event} />
-                  <Show when={thread.children.length}>
-                    <div class="ml-8">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="flex items-center gap-2 text-muted-foreground hover:text-foreground"
-                        onClick={() =>
-                          setThreads(threads => {
-                            const idx = threads.indexOf(thread)
-                            threads[idx].expanded = true
-                            return threads
-                          })
-                        }
-                      >
-                        <Switch>
-                          <Match when={thread.expanded}>
-                            <ChevronUp class="h-4 w-4" />
-                          </Match>
-                          <Match when={!thread.expanded}>
-                            <ChevronDown class="h-4 w-4" />
-                          </Match>
-                        </Switch>
-                        {thread.children.length}{" "}
-                        {thread.children.length === 1 ? "reply" : "replies"}
-                      </Button>
-                      <Show when={thread.expanded}>
-                        <div class="mt-2 space-y-4 border-l-2 border-muted pl-4">
-                          <For each={thread.children}>
-                            {reply => <VoiceNote event={reply.event} />}
-                          </For>
-                        </div>
-                      </Show>
-                    </div>
-                  </Show>
+                  <VoiceNote event={note} />
                 </div>
               )}
             </For>
