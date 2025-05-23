@@ -12,9 +12,15 @@ import { loadRelayList } from "@nostr/gadgets/lists"
 import { getBlossomServers, uploadToBlossom } from "./blossom"
 import { Badge } from "./components/ui/badge"
 import { NostrEvent } from "@nostr/tools"
+import { recordingReply, recordingRoot, setRecordingReply, setRecordingRoot } from "./global"
 
-function Create(props: { replyingTo?: NostrEvent; children: JSXElement }) {
-  const [isRecording, setIsRecording] = createSignal(false)
+function Create(props: { replyingTo?: NostrEvent; children?: JSXElement }) {
+  const [isRecording, setIsRecording] = props.replyingTo
+    ? [
+        () => recordingReply() === props.replyingTo.id,
+        (is: string) => setRecordingReply(is ? props.replyingTo.id : "")
+      ]
+    : [recordingRoot, setRecordingRoot]
   const [previewUrl, setPreviewUrl] = createSignal<string | null>(null)
   const [recordingDuration, setRecordingDuration] = createSignal(0)
   let recordingInterval: number
@@ -28,6 +34,8 @@ function Create(props: { replyingTo?: NostrEvent; children: JSXElement }) {
   let outbox: string[] = []
 
   createEffect(async () => {
+    if (!user()?.current) return
+
     outbox = (await loadRelayList(user().current.pubkey)).items
       .filter(r => r.write)
       .slice(0, 4)
@@ -212,6 +220,21 @@ function Create(props: { replyingTo?: NostrEvent; children: JSXElement }) {
       return
     }
 
+    if (props.replyingTo && recordingRoot()) {
+      // if global is already recording we can't
+      return
+    }
+
+    if (props.replyingTo && recordingReply() && recordingReply() !== props.replyingTo.id) {
+      // if some other reply is being recorded we can't start this one either
+      return
+    }
+
+    if (!props.replyingTo && recordingReply()) {
+      // this should never happen as the button will vanish anyway but just for completeness
+      return
+    }
+
     if (isRecording()) {
       // stop recording
       stopRecording()
@@ -304,23 +327,23 @@ function Create(props: { replyingTo?: NostrEvent; children: JSXElement }) {
       return
     }
 
-    const audioUrl = await uploadToBlossom(audioBlobWithType, blossomServers)
-    const event = await user().current.signer.signEvent({
-      created_at: Math.round(Date.now() / 1000),
-      kind: props.replyingTo ? 1244 : 1222,
-      content: audioUrl,
-      tags: [
-        ...hashtags().map(tag => ["t", tag]),
-        ...(props.replyingTo
-          ? [
-              ["p", props.replyingTo.pubkey],
-              ["e", props.replyingTo.id]
-            ]
-          : [])
-      ]
-    })
-
     try {
+      const audioUrl = await uploadToBlossom(audioBlobWithType, blossomServers)
+      const event = await user().current.signer.signEvent({
+        created_at: Math.round(Date.now() / 1000),
+        kind: props.replyingTo ? 1244 : 1222,
+        content: audioUrl,
+        tags: [
+          ...hashtags().map(tag => ["t", tag]),
+          ...(props.replyingTo
+            ? [
+                ["p", props.replyingTo.pubkey],
+                ["e", props.replyingTo.id]
+              ]
+            : [])
+        ]
+      })
+
       const relays = props.replyingTo
         ? [
             ...outbox,

@@ -102,7 +102,7 @@ function storeState() {
 }
 
 ;(async function initialLoad() {
-  await new Promise(resolve => setTimeout(resolve, 200))
+  await new Promise(resolve => setTimeout(resolve, 500))
 
   const logins = JSON.parse(localStorage.getItem("nostr:logins") || "[]") as string[]
   const users = await Promise.all(logins.map(data => makeUserLogin(data)))

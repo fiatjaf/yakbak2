@@ -108,7 +108,11 @@ export async function uploadToBlossom(
     }
   }
 
-  throw new Error(`all blossom servers failed (${servers})`)
+  if (!uploadedTo) {
+    throw new Error(`all blossom servers failed (${servers})`)
+  }
+
+  return uploadedTo
 }
 
 export async function getBlossomServers(pubkey: string): Promise<string[]> {
