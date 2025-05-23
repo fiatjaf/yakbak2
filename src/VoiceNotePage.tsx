@@ -36,27 +36,24 @@ function VoiceNotePage() {
     return res[0]
   })
 
-  const [root] = createResource<NostrEvent | null, NostrEvent>(
-    event(),
-    async (event: NostrEvent) => {
-      const tag = event.tags.find(t => t[0] === "E")
-      if (!tag) return null
+  const [root] = createResource<NostrEvent | null, NostrEvent>(event, async (event: NostrEvent) => {
+    const tag = event.tags.find(t => t[0] === "E")
+    if (!tag) return null
 
-      const id = tag[1]
-      const hint = tag[2]
-      if (hint) {
-        let res = await pool.querySync([hint], { ids: [id] }, { label: "parent-1st" })
-        if (res.length) return res[0]
-      }
-      const author = tag[3]
-      let outboxMinusHint = (await loadRelayList(author)).items
-        .filter(r => r.write && r.url !== hint)
-        .slice(0, 4)
-        .map(r => r.url)
-      const res = await pool.querySync(outboxMinusHint, { ids: [id] }, { label: "parent-2nd" })
-      return res[0] || null
+    const id = tag[1]
+    const hint = tag[2]
+    if (hint) {
+      let res = await pool.querySync([hint], { ids: [id] }, { label: "parent-1st" })
+      if (res.length) return res[0]
     }
-  )
+    const author = tag[3]
+    let outboxMinusHint = (await loadRelayList(author)).items
+      .filter(r => r.write && r.url !== hint)
+      .slice(0, 4)
+      .map(r => r.url)
+    const res = await pool.querySync(outboxMinusHint, { ids: [id] }, { label: "parent-2nd" })
+    return res[0] || null
+  })
 
   const [replies, setReplies] = createSignal<NostrEvent[]>([])
 
@@ -78,7 +75,7 @@ function VoiceNotePage() {
       inbox,
       {
         kinds: [1244],
-        "#E": [parent.id],
+        "#e": [parent.id],
         limit: 30
       },
       {

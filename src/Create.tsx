@@ -337,7 +337,15 @@ function Create(props: { replyingTo?: NostrEvent; children?: JSXElement }) {
           ...(props.replyingTo
             ? [
                 ["p", props.replyingTo.pubkey],
-                ["e", props.replyingTo.id]
+                ["e", props.replyingTo.id],
+                ["k", props.replyingTo.kind.toString()],
+                ...(props.replyingTo.kind === 1244 || props.replyingTo.kind === 1111
+                  ? props.replyingTo.tags.filter(t => t[0] === "P" || t[0] === "E" || t[0] === "K")
+                  : [
+                      ["P", props.replyingTo.pubkey],
+                      ["E", props.replyingTo.id],
+                      ["K", props.replyingTo.kind.toString()]
+                    ])
               ]
             : [])
         ]
