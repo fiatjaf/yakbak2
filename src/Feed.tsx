@@ -12,6 +12,7 @@ import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group"
 import { DefinedTab, getRequestDeclaration, global, Tab } from "./nostr"
 
 const NOTES_PER_PAGE = 3
+const INITIAL_THRESHOLD = 7
 
 function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) {
   const [tab, setTab] = createSignal<DefinedTab>(props.forcedTabs ? props.forcedTabs[0] : global)
@@ -19,7 +20,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
   const [isLoading, setLoading] = createSignal(false)
   const [visibleTabs, setVisibleTabs] = createSignal<[string, Tab][]>(props.forcedTabs ?? [global])
   let allEvents: NostrEvent[] = []
-  let threshold = 7
+  let threshold = INITIAL_THRESHOLD
 
   let ref: HTMLDivElement | undefined
   let closer: SubCloser
@@ -32,6 +33,8 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
   createEffect(async () => {
     const selected = tab()
     console.log("starting subscription", selected)
+    allEvents = []
+    threshold = INITIAL_THRESHOLD
     setLoading(true)
     setNotes([])
 
@@ -43,6 +46,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
       limit: 400 // see note about this under "infinite scroll / pagination"
     })
     let eosed = false
+    let doneWaiting = setTimeout(flush, 2800)
     closer = pool.subscribeMap(requestMap, {
       label: `feed-${selected[0]}`,
       onevent(event) {
@@ -55,14 +59,19 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
         }
       },
       oneose() {
+        clearTimeout(doneWaiting)
         eosed = true
-        allEvents.sort((a, b) => b.created_at - a.created_at)
-        batch(() => {
-          setNotes(allEvents.slice(0, threshold))
-          setLoading(false)
-        })
+        flush()
       }
     })
+
+    function flush() {
+      allEvents.sort((a, b) => b.created_at - a.created_at)
+      batch(() => {
+        setNotes(allEvents.slice(0, threshold))
+        setLoading(false)
+      })
+    }
   })
 
   // infinite scroll / pagination
