@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { batch, createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { Globe, Telescope, User, Users } from "lucide-solid"
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer"
 import { NostrEvent } from "@nostr/tools/pure"
@@ -11,11 +11,15 @@ import user from "./user"
 import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group"
 import { DefinedTab, getRequestDeclaration, global, Tab } from "./nostr"
 
+const NOTES_PER_PAGE = 3
+
 function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) {
   const [tab, setTab] = createSignal<DefinedTab>(props.forcedTabs ? props.forcedTabs[0] : global)
   const [notes, setNotes] = createSignal<NostrEvent[]>([])
   const [isLoading, setLoading] = createSignal(false)
   const [visibleTabs, setVisibleTabs] = createSignal<[string, Tab][]>(props.forcedTabs ?? [global])
+  let allEvents: NostrEvent[] = []
+  let threshold = 7
 
   let ref: HTMLDivElement | undefined
   let closer: SubCloser
@@ -36,32 +40,41 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
     const requestMap = await getRequestDeclaration(selected[1], {
       ...(selected[1].baseFilter || {}),
       kinds: [1222],
-      limit: 20
+      limit: 400 // see note about this under "infinite scroll / pagination"
     })
-    let eosed = true
-    let events: NostrEvent[] = []
+    let eosed = false
     closer = pool.subscribeMap(requestMap, {
       label: `feed-${selected[0]}`,
       onevent(event) {
         if (event.tags.find(t => t[0] === "e")) return
-
-        events.push(event)
+        allEvents.push(event)
         if (eosed) {
+          allEvents.unshift(event)
           setNotes(events => [event, ...events])
+          threshold++
         }
       },
       oneose() {
         eosed = true
-        events.sort((a, b) => b.created_at - a.created_at)
-        setNotes(events)
-        setLoading(false)
+        allEvents.sort((a, b) => b.created_at - a.created_at)
+        batch(() => {
+          setNotes(allEvents.slice(0, threshold))
+          setLoading(false)
+        })
       }
     })
   })
 
+  // infinite scroll / pagination
   createEffect(() => {
     if (visible()) {
-      console.log("fetch next page")
+      // our infinite scroll is just allowing more events to be rendered
+      // we already have these events in memory, but we don't render them all at once because it's wasteful
+      // (requires opening more subscriptions, fetching replies etc)
+      // TODO: store things locally instead of having to download a ton of events on first load
+      console.log("infinite scroll next page threshold")
+      threshold += NOTES_PER_PAGE
+      setNotes(allEvents.slice(0, threshold))
     }
   })
 
