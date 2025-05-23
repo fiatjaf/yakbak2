@@ -79,7 +79,7 @@ function LoginDialog(props: {
                 <Button
                   class="w-full rounded-full py-6 mt-4"
                   onClick={handleKeyLogin}
-                  disabled={isLoading() || !nsec().trim()}
+                  disabled={isLoading() || !nsec().trim() || !nsec().startsWith("nsec1")}
                 >
                   {isLoading() ? "Verifying..." : "Login with Nsec"}
                 </Button>
