@@ -11,7 +11,7 @@ import { pool } from "@nostr/gadgets/global"
 import { loadRelayList } from "@nostr/gadgets/lists"
 import { getBlossomServers, uploadToBlossom } from "./blossom"
 import { Badge } from "./components/ui/badge"
-import { NostrEvent } from "@nostr/tools"
+import { NostrEvent } from "@nostr/tools/pure"
 import { recordingReply, recordingRoot, setRecordingReply, setRecordingRoot } from "./global"
 
 function Create(props: { replyingTo?: NostrEvent; children?: JSXElement }) {

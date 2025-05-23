@@ -1,6 +1,6 @@
 import { pool } from "@nostr/gadgets/global"
 import { loadRelayList } from "@nostr/gadgets/lists"
-import { NostrEvent } from "@nostr/tools"
+import { NostrEvent } from "@nostr/tools/pure"
 import { sha256 } from "@noble/hashes/sha256"
 
 import user from "./user"

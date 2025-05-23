@@ -35,7 +35,8 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
 
     const requestMap = await getRequestDeclaration(selected[1], {
       ...(selected[1].baseFilter || {}),
-      kinds: [1222]
+      kinds: [1222],
+      limit: 20
     })
     let eosed = true
     let events: NostrEvent[] = []

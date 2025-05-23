@@ -88,7 +88,7 @@ function VoiceNote(props: { event: NostrEvent }) {
     return undefined
   })
 
-  // Check if the current user has reacted to this message and get reaction count
+  // check if the current user has reacted to this message and get reaction count, zap count, reply count etc
   let closer: SubCloser
   onMount(async () => {
     theirInbox = (await loadRelayList(props.event.pubkey)).items

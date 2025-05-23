@@ -12,7 +12,7 @@ import { Button } from "./components/ui/button"
 import user from "./user"
 import { isValid, Nip05 } from "@nostr/tools/nip05"
 import { loadFollowsList, loadRelayList } from "@nostr/gadgets/lists"
-import { EventTemplate } from "@nostr/tools"
+import { EventTemplate } from "@nostr/tools/pure"
 import { pool } from "@nostr/gadgets/global"
 import { Check, Copy } from "lucide-solid"
 
