@@ -33,9 +33,10 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
 
     if (closer) closer.close()
 
-    const requestMap = await getRequestDeclaration(selected[1], [
-      { ...(selected[1].baseFilter || {}), kinds: [1222] }
-    ])
+    const requestMap = await getRequestDeclaration(selected[1], {
+      ...(selected[1].baseFilter || {}),
+      kinds: [1222]
+    })
     let eosed = true
     let events: NostrEvent[] = []
     closer = pool.subscribeMap(requestMap, {

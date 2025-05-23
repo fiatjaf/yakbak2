@@ -18,7 +18,7 @@ function Create(props: { replyingTo?: NostrEvent; children?: JSXElement }) {
   const [isRecording, setIsRecording] = props.replyingTo
     ? [
         () => recordingReply() === props.replyingTo.id,
-        (is: string) => setRecordingReply(is ? props.replyingTo.id : "")
+        (is: boolean) => setRecordingReply(is ? props.replyingTo.id : "")
       ]
     : [recordingRoot, setRecordingRoot]
   const [previewUrl, setPreviewUrl] = createSignal<string | null>(null)
@@ -167,10 +167,9 @@ function Create(props: { replyingTo?: NostrEvent; children?: JSXElement }) {
                     onSubmit={e => {
                       e.preventDefault()
                       const newTags = parseHashtags(newHashtag())
-                      const uniqueTags = Array.from(new Set([...hashtags(), ...newTags])).slice(
-                        0,
-                        3
-                      )
+                      const uniqueTags = Array.from(new Set([...hashtags(), ...newTags]))
+                        .slice(0, 3)
+                        .map(hashtag => hashtag.toLowerCase())
                       setHashtags(uniqueTags)
                       setNewHashtag("")
                     }}
