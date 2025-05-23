@@ -26,8 +26,8 @@ export default user
 
 export function setLogin(pubkey: string) {
   set(user => ({
-    current: user.all.find(u => u.pubkey === pubkey),
-    ...user
+    ...user,
+    current: user.all.find(u => u.pubkey === pubkey)
   }))
   storeState()
 }
