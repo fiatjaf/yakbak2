@@ -6,7 +6,7 @@ import { neventEncode, npubEncode } from "@nostr/tools/nip19"
 import { onMount, createResource, createSignal, onCleanup, For, Show, createEffect } from "solid-js"
 import { toast } from "solid-sonner"
 import { A, useLocation, useNavigate } from "@solidjs/router"
-import { Badge, Copy, Heart, MoreVertical, Share2, Trash2, Zap } from "lucide-solid"
+import { Badge, Copy, Heart, Mic, MoreVertical, Share2, Trash2, Zap } from "lucide-solid"
 import { pool } from "@nostr/gadgets/global"
 import { loadRelayList } from "@nostr/gadgets/lists"
 import { SubCloser } from "@nostr/tools/abstract-pool"
@@ -38,16 +38,19 @@ import Create from "./Create"
 
 function VoiceNote(props: { event: NostrEvent }) {
   const [author] = createResource(props.event.pubkey, loadNostrUser)
-  const nevent = neventEncode({
-    id: props.event.id,
-    author: props.event.pubkey,
-    relays: Array.from(pool.seenOn.get(props.event.id)).map(r => r.url)
-  })
+  const nevent = () =>
+    neventEncode({
+      id: props.event.id,
+      author: props.event.pubkey,
+      relays: Array.from(pool.seenOn.get(props.event.id)).map(r => r.url)
+    })
   const npub = npubEncode(props.event.pubkey)
   const navigate = useNavigate()
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = createSignal(false)
   const [hasReacted, setHasReacted] = createSignal(false)
   const [reactionCount, setReactionCount] = createSignal(0)
+  const [replyCount, setReplyCount] = createSignal(0)
+  const [hasReplied, setHasReplied] = createSignal(false)
   const [zapAmount, setZapAmount] = createSignal(0)
   const [hasZapped, setHasZapped] = createSignal(false)
   let audioRef: HTMLAudioElement | undefined
@@ -95,7 +98,7 @@ function VoiceNote(props: { event: NostrEvent }) {
     closer = pool.subscribe(
       theirInbox,
       {
-        kinds: [7, 9735],
+        kinds: [7, 9735, 1244],
         "#e": [props.event.id]
       },
       {
@@ -113,15 +116,21 @@ function VoiceNote(props: { event: NostrEvent }) {
                 )
               ) {
                 setHasZapped(true)
-                break
               }
               break
             case 7:
               setReactionCount(curr => curr + 1)
               if (user().current && event.pubkey === user().current.pubkey) {
                 setHasReacted(true)
+              }
+              break
+            case 1244:
+              setReplyCount(curr => curr + 1)
+              if (user().current && event.pubkey === user().current.pubkey) {
+                setHasReplied(true)
                 break
               }
+              break
           }
         }
       }
@@ -187,7 +196,7 @@ function VoiceNote(props: { event: NostrEvent }) {
                     ) {
                       return
                     }
-                    navigate(`/${nevent}`)
+                    navigate(`/${nevent()}`)
                   }}
                 >
                   {new Date(props.event.created_at * 1000).toLocaleString()}
@@ -199,24 +208,20 @@ function VoiceNote(props: { event: NostrEvent }) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    {nevent && (
-                      <DropdownMenuItem
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(nevent)
-                          toast.success("nevent copied to clipboard")
-                        }}
-                      >
-                        <Copy class="mr-2 h-4 w-4" />
-                        Copy nevent
-                      </DropdownMenuItem>
-                    )}
-                    {nevent && (
-                      <DropdownMenuItem onClick={handleShareURL}>
-                        <Share2 class="mr-2 h-4 w-4" />
-                        Share URL
-                      </DropdownMenuItem>
-                    )}
-                    {user().current?.pubkey === props.event.pubkey && (
+                    <DropdownMenuItem
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(nevent())
+                        toast.success("nevent copied to clipboard")
+                      }}
+                    >
+                      <Copy class="mr-2 h-4 w-4" />
+                      Copy nevent
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleShareURL}>
+                      <Share2 class="mr-2 h-4 w-4" />
+                      Share URL
+                    </DropdownMenuItem>
+                    <Show when={user().current?.pubkey === props.event.pubkey}>
                       <DropdownMenuItem
                         onClick={() => setIsDeleteDialogOpen(true)}
                         class="text-destructive focus:text-destructive"
@@ -224,7 +229,7 @@ function VoiceNote(props: { event: NostrEvent }) {
                         <Trash2 class="mr-2 h-4 w-4" />
                         Request deletion
                       </DropdownMenuItem>
-                    )}
+                    </Show>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -259,17 +264,20 @@ function VoiceNote(props: { event: NostrEvent }) {
             )}
 
             <div class="mt-4 flex items-center flex-wrap gap-6">
-              <Show when={user()?.current}>
-                <Create replyingTo={props.event} />
-              </Show>
-              <Button variant="ghost" size="sm" onClick={handleReaction}>
+              <Create replyingTo={props.event}>
+                <Mic class={`h-5 w-5 ${hasReplied() ? "text-sky-500" : ""}`} />
+                <Show when={replyCount() > 0}>
+                  <span class="ml-1 text-sm">{replyCount()}</span>
+                </Show>
+              </Create>
+              <Button variant="ghost" size="sm" onClick={handleReaction} title="Likes">
                 <Heart class={`h-5 w-5 ${hasReacted() ? "fill-current text-red-500" : ""}`} />
                 <Show when={reactionCount() > 0}>
                   <span class="ml-1 text-sm">{reactionCount()}</span>
                 </Show>
               </Button>
               <Show when={zapEndpoint() && settings().defaultZapAmount}>
-                <Button variant="ghost" size="sm" onClick={handleZap}>
+                <Button variant="ghost" size="sm" onClick={handleZap} title="Zaps">
                   <Zap class={`h-5 w-5 ${hasZapped() ? "text-yellow-500 fill-current" : ""}`} />
                   <Show when={zapAmount() > 0}>
                     <span class="ml-1 text-sm">{formatZapAmount(Math.round(zapAmount()))}</span>
@@ -416,7 +424,7 @@ function VoiceNote(props: { event: NostrEvent }) {
 
   async function handleShareURL() {
     try {
-      const url = `${window.location.origin}/${nevent}`
+      const url = `${window.location.origin}/${nevent()}`
       await navigator.clipboard.writeText(url)
       toast.success("URL copied to clipboard")
     } catch (error) {

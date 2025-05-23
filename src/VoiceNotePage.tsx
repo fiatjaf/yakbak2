@@ -133,7 +133,7 @@ function VoiceNotePage() {
               </Card>
             </div>
           </Show>
-          {/* If root is shown, nest the current message visually */}
+          {/* if root is shown, nest the current message visually */}
           <div class={root() ? "ml-6 border-l-2 border-primary/30 pl-4" : ""}>
             <Show when={root()}>
               <div class="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wide">
@@ -143,15 +143,12 @@ function VoiceNotePage() {
             <VoiceNote event={event()} />
           </div>
           <Show when={replies()?.length > 0}>
-            <h2 class="text-lg font-semibold mb-2">Replies</h2>
+            <h2 class="text-lg font-semibold my-6">Replies</h2>
             <Show when={replies().length > 0}>
               <div class="space-y-4">
                 <For each={replies()}>
                   {reply => (
                     <div class="ml-6 border-l-2 border-primary/20 pl-4">
-                      <div class="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wide">
-                        Reply
-                      </div>
                       <VoiceNote event={reply} />
                     </div>
                   )}
