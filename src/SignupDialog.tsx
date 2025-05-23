@@ -1,7 +1,7 @@
 import { generateSecretKey } from "@nostr/tools/pure"
 import { nsecEncode } from "@nostr/tools/nip19"
 import { createSignal, Match, Switch } from "solid-js"
-import { Download, Key } from "lucide-solid"
+import { Download, Key, Loader } from "lucide-solid"
 import { toast } from "solid-sonner"
 
 import {
@@ -99,7 +99,7 @@ function SignupDialog(props: { isOpen: boolean; onClose: () => void }) {
             </DialogHeader>
             <div class="px-6 py-8 space-y-6">
               <div class="flex justify-center items-center py-8">
-                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                <Loader class="animate-spin rounded-full h-12 w-12" />
               </div>
             </div>
           </Match>

@@ -17,6 +17,7 @@ import { SubCloser } from "@nostr/tools/abstract-pool"
 
 import VoiceNote from "./VoiceNote"
 import { Card } from "./components/ui/card"
+import { Loader } from "lucide-solid"
 
 function VoiceNotePage() {
   const { nevent } = useParams<{ nevent: string }>()
@@ -111,7 +112,7 @@ function VoiceNotePage() {
       <Match when={event.loading}>
         <div class="container mx-auto px-4 py-8 max-w-2xl">
           <div class="flex justify-center">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+            <Loader class="animate-spin rounded-full h-8 w-8" />
           </div>
         </div>
       </Match>

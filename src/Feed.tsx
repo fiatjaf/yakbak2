@@ -1,5 +1,5 @@
 import { batch, createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
-import { Globe, Telescope, User, Users } from "lucide-solid"
+import { Globe, Loader, Telescope, User, Users } from "lucide-solid"
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer"
 import { NostrEvent } from "@nostr/tools/pure"
 import { pool } from "@nostr/gadgets/global"
@@ -126,7 +126,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
         <Switch>
           <Match when={isLoading()}>
             <div class="flex justify-center mt-12">
-              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+              <Loader class="animate-spin rounded-full h-8 w-8" />
             </div>
           </Match>
           <Match when={true}>
@@ -145,7 +145,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
 
       {/*
         {isFetchingNextPage ? (
-          <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900" />
+          <Loader class="animate-spin rounded-full h-4 w-4" />
         ) : !hasNextPage && hasMessages ? (
           <div class="text-sm text-muted-foreground">No more messages</div>
         ) : !hasMessages ? (

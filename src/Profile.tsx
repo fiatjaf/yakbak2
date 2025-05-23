@@ -14,7 +14,7 @@ import { isValid, Nip05 } from "@nostr/tools/nip05"
 import { loadFollowsList, loadRelayList } from "@nostr/gadgets/lists"
 import { EventTemplate } from "@nostr/tools/pure"
 import { pool } from "@nostr/gadgets/global"
-import { Check, Copy } from "lucide-solid"
+import { Check, Copy, Loader } from "lucide-solid"
 
 function Profile() {
   const { npub } = useParams<{ npub: string }>()
@@ -43,7 +43,7 @@ function Profile() {
     <Switch>
       <Match when={author.loading}>
         <div class="flex justify-center mt-12">
-          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+          <Loader class="animate-spin rounded-full h-8 w-8" />
         </div>
       </Match>
       <Match when={author()}>
