@@ -1,12 +1,10 @@
 import { pool } from "@nostr/gadgets/global"
 import { loadRelayList } from "@nostr/gadgets/lists"
 import { NostrEvent } from "@nostr/tools"
-import user from "./user"
+import { sha256 } from "@noble/hashes/sha256"
 
-interface BlossomServer {
-  url: string
-  pubkey: string
-}
+import user from "./user"
+import { bytesToHex } from "@noble/hashes/utils"
 
 interface BlobDescriptor {
   url: string
@@ -16,44 +14,11 @@ interface BlobDescriptor {
   uploaded: number
 }
 
-// Default blossom server - you can replace this with your preferred server
-const DEFAULT_BLOSSOM_SERVER: BlossomServer = {
-  url: "https://blossom.band",
-  pubkey: "npub1blossomserver"
-}
-
-function isValidUrl(url: string): boolean {
-  try {
-    // Fix common URL issues
-    let fixedUrl = url
-    if (url.includes("/net/")) {
-      fixedUrl = url.replace("/net/", ".net/")
-    }
-
-    new URL(fixedUrl)
-    return true
-  } catch {
-    return false
-  }
-}
-
-function fixUrl(url: string): string {
-  if (url.includes("/net/")) {
-    return url.replace("/net/", ".net/")
-  }
-  return url
-}
-
-async function calculateSHA256(blob: Blob): Promise<string> {
-  const buffer = await blob.arrayBuffer()
-  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("")
-}
+const DEFAULT_BLOSSOM_SERVERS = ["https://blossom.band", "https://blossom.primal.net"]
 
 async function createAuthorizationEvent(
   verb: "get" | "upload" | "list" | "delete",
-  sha256?: string,
+  sha256?: Uint8Array,
   expirationHours: number = 24
 ): Promise<NostrEvent> {
   const now = Math.floor(Date.now() / 1000)
@@ -62,57 +27,47 @@ async function createAuthorizationEvent(
     ["expiration", (now + expirationHours * 3600).toString()]
   ]
 
-  // Add SHA256 tag for upload and delete operations
   if (sha256 && (verb === "upload" || verb === "delete")) {
-    tags.push(["x", sha256])
+    tags.push(["x", bytesToHex(sha256)])
   }
 
-  const event = await user().current.signer.signEvent({
+  return await user().current.signer.signEvent({
     kind: 24242,
     content: "",
     tags,
     created_at: now
   })
-
-  return event
 }
 
 export async function uploadToBlossom(
   blob: Blob,
-  servers: BlossomServer[] = [DEFAULT_BLOSSOM_SERVER]
+  servers: string[] = DEFAULT_BLOSSOM_SERVERS
 ): Promise<string> {
-  // Filter out invalid URLs and ensure we have at least one valid server
-  const validServers = servers
-    .map(server => ({
-      ...server,
-      url: fixUrl(server.url)
-    }))
-    .filter(server => isValidUrl(server.url))
-
-  if (validServers.length === 0) {
+  if (servers.length === 0) {
     throw new Error("No valid blossom servers available")
   }
 
-  const sha256 = await calculateSHA256(blob)
-  const authEvent = await createAuthorizationEvent("upload", sha256)
+  const sha = sha256(new Uint8Array(await blob.arrayBuffer()))
+  const authEvent = await createAuthorizationEvent("upload", sha)
   const authHeader = `Nostr ${btoa(JSON.stringify(authEvent))}`
 
-  // Try each server in sequence until one succeeds
-  for (const server of validServers) {
-    try {
-      const uploadUrl = new URL("/upload", server.url).toString()
-      console.log("attempting upload to:", uploadUrl)
+  // once this is set we'll attempt mirroring from this server to others
+  let uploadedTo: string | undefined
 
-      // Upload the blob
-      const response = await fetch(uploadUrl, {
+  for (const server of servers) {
+    try {
+      const target = new URL(`/${uploadedTo ? "mirror" : "upload"}`, server).toString()
+      console.log("attempting", target)
+
+      // upload or mirror the blob
+      const response = await fetch(target, {
         method: "PUT",
-        body: blob,
+        body: uploadedTo ? JSON.stringify({ url: uploadedTo }) : blob,
         headers: {
           "Content-Type": blob.type,
           "Content-Length": blob.size.toString(),
           Accept: "application/json",
-          Authorization: authHeader,
-          Origin: window.location.origin
+          Authorization: authHeader
         },
         mode: "cors",
         credentials: "omit"
@@ -123,42 +78,40 @@ export async function uploadToBlossom(
         console.log(
           `upload failed with status ${response.status}${
             reason ? ` - ${reason}` : ""
-          } for ${uploadUrl}`
+          } for ${target}`
         )
-        // Try to get more error details
+
+        // try to get more error details
         try {
           const errorData = await response.text()
-          console.log("Error response:", errorData)
+          console.log("error response:", errorData)
         } catch (e) {
-          console.log("Could not read error response")
+          console.log("could not read error response")
         }
-        continue // Try next server
+        continue
       }
 
       const data: BlobDescriptor = await response.json()
-
       if (!data.url) {
-        console.log("No URL returned from server for", uploadUrl)
-        continue // Try next server
+        console.log("no URL returned from server", target)
+        continue
+      }
+      if (data.sha256 !== bytesToHex(sha)) {
+        console.log("server returned different SHA256 hash:", data.sha256)
+        continue
       }
 
-      // Verify the SHA256 matches
-      if (data.sha256 !== sha256) {
-        console.log("Server returned different SHA256 hash:", data.sha256)
-        continue // Try next server
-      }
-
-      return data.url
+      uploadedTo = data.url
     } catch (error) {
-      console.error(`Failed to upload to ${server.url}:`, error)
-      continue // Try next server
+      console.error(`failed to upload to ${server}:`, error)
+      continue
     }
   }
 
-  throw new Error("All blossom servers failed")
+  throw new Error(`all blossom servers failed (${servers})`)
 }
 
-export async function getBlossomServers(pubkey: string): Promise<BlossomServer[]> {
+export async function getBlossomServers(pubkey: string): Promise<string[]> {
   const outbox = (await loadRelayList(user().current.pubkey)).items
     .filter(r => r.write)
     .slice(0, 6)
@@ -170,37 +123,22 @@ export async function getBlossomServers(pubkey: string): Promise<BlossomServer[]
     limit: 1
   })
 
-  // If no blossom servers are found, return the default server
+  // if no blossom servers are found, return the default server
   if (!blossomEvents.length) {
-    console.log("No blossom servers found, using default server:", DEFAULT_BLOSSOM_SERVER.url)
-    return [DEFAULT_BLOSSOM_SERVER]
+    console.log("no blossom servers found, using default server")
+    return DEFAULT_BLOSSOM_SERVERS
   }
 
-  // Extract server URLs from the 'server' tags and fix any malformed URLs
-  const servers = blossomEvents
-    .flatMap((event: NostrEvent) =>
-      event.tags
-        .filter(tag => tag[0] === "server")
-        .map(tag => ({
-          url: fixUrl(tag[1]),
-          pubkey: event.pubkey
-        }))
-    )
-    .filter(server => isValidUrl(server.url))
-
-  // If no valid servers were found, use the default
-  if (servers.length === 0) {
-    console.log(
-      "No valid blossom servers found in events, using default server:",
-      DEFAULT_BLOSSOM_SERVER.url
-    )
-    return [DEFAULT_BLOSSOM_SERVER]
-  }
-
-  console.log(
-    "Found blossom servers:",
-    servers.map(s => s.url)
+  // extract server URLs from the 'server' tags and fix any malformed URLs
+  const servers = blossomEvents.flatMap((event: NostrEvent) =>
+    event.tags.filter(tag => tag[0] === "server").map(tag => tag[1])
   )
 
+  if (servers.length === 0) {
+    console.log("no valid blossom servers found in events, using default server")
+    return DEFAULT_BLOSSOM_SERVERS
+  }
+
+  console.log("found blossom servers:", servers)
   return servers
 }
