@@ -1,6 +1,16 @@
 import { ArrowUpToLine, Hash, Loader, Mic, MicOff, Pause, Play, Trash2 } from "lucide-solid"
 import { toast } from "solid-sonner"
-import { createEffect, createSignal, For, JSXElement, Match, Show, Switch } from "solid-js"
+import {
+  createEffect,
+  createSignal,
+  For,
+  JSXElement,
+  Match,
+  onCleanup,
+  onMount,
+  Show,
+  Switch
+} from "solid-js"
 
 import { Button } from "./components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./components/ui/dialog"
@@ -14,7 +24,11 @@ import { Badge } from "./components/ui/badge"
 import { NostrEvent } from "@nostr/tools/pure"
 import { recordingReply, recordingRoot, setRecordingReply, setRecordingRoot } from "./global"
 
-function Create(props: { replyingTo?: NostrEvent; children?: JSXElement }) {
+function Create(props: {
+  replyingTo?: NostrEvent
+  children?: JSXElement
+  vanishesOnScroll?: boolean
+}) {
   const [isRecording, setIsRecording] = props.replyingTo
     ? [
         () => recordingReply() === props.replyingTo.id,
@@ -29,6 +43,7 @@ function Create(props: { replyingTo?: NostrEvent; children?: JSXElement }) {
   const [hashtags, setHashtags] = createSignal<string[]>([])
   const [isHashtagDialogOpen, setIsHashtagDialogOpen] = createSignal(false)
   const [newHashtag, setNewHashtag] = createSignal("")
+  const [isScrolling, setIsScrolling] = createSignal(false)
 
   let audioRef: HTMLAudioElement | undefined
   let mediaRecorder: MediaRecorder | undefined
@@ -42,6 +57,21 @@ function Create(props: { replyingTo?: NostrEvent; children?: JSXElement }) {
       .slice(0, 4)
       .map(r => r.url)
   })
+
+  onMount(() => {
+    if (props.vanishesOnScroll) window.addEventListener("scroll", handleScroll)
+  })
+  onCleanup(() => {
+    window.removeEventListener("scroll", handleScroll)
+  })
+  let scrollingTimeout: number
+  function handleScroll() {
+    setIsScrolling(true)
+    if (scrollingTimeout) clearTimeout(scrollingTimeout)
+    scrollingTimeout = setTimeout(() => {
+      setIsScrolling(false)
+    }, 220)
+  }
 
   return (
     <Switch>
@@ -171,6 +201,29 @@ function Create(props: { replyingTo?: NostrEvent; children?: JSXElement }) {
         </div>
       </Match>
 
+      {/* recording */}
+      <Match when={isRecording()}>
+        <div class="flex items-center gap-4">
+          <Button
+            onClick={handleRecord}
+            size={props.replyingTo ? "sm" : "lg"}
+            variant={props.replyingTo ? "ghost" : undefined}
+            class="h-16 w-16 shadow-lg rounded-[50%] transition-transform duration-200 bg-destructive hover:bg-destructive/90"
+            title={props.replyingTo ? "Replies" : undefined}
+          >
+            <div class="flex flex-col items-center">
+              <MicOff class="h-6 w-6" />
+              <span class="text-xs mt-1">{recordingDuration()}s / 60</span>
+            </div>
+          </Button>
+        </div>
+      </Match>
+
+      {/* if we're not recording scrolling makes the button invisible */}
+      <Match when={isScrolling()}>
+        <></>
+      </Match>
+
       {/* default state, ready to record */}
       <Match when={!previewUrl()}>
         <div class="flex items-center gap-4">
@@ -178,19 +231,12 @@ function Create(props: { replyingTo?: NostrEvent; children?: JSXElement }) {
             onClick={handleRecord}
             size={props.replyingTo ? "sm" : "lg"}
             variant={props.replyingTo ? "ghost" : undefined}
-            class={`${props.replyingTo && !isRecording() ? "h-9 bg-transparent text-black hover:bg-accent shadow-none rounded-md" : "h-16 w-16 shadow-lg rounded-[50%]"} transition-transform duration-200 ${isRecording() ? "bg-destructive hover:bg-destructive/90" : ""}`}
+            class={`${props.replyingTo ? "h-9 bg-transparent text-black hover:bg-accent shadow-none rounded-md" : "h-16 w-16 shadow-lg rounded-[50%]"} transition-transform duration-200`}
             title={props.replyingTo ? "Replies" : undefined}
           >
             <Switch>
-              {/* when recording, display the countdown */}
-              <Match when={isRecording()}>
-                <div class="flex flex-col items-center">
-                  <MicOff class="h-6 w-6" />
-                  <span class="text-xs mt-1">{recordingDuration()}s / 60</span>
-                </div>
-              </Match>
               <Match when={props.children}>
-                {/* otherwise display either the stuff we got from the parent
+                {/* display either the stuff we got from the parent
                       (which probably includes a count of replies and stuff) */}
                 {props.children}
               </Match>
