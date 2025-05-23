@@ -9,15 +9,7 @@ import { SubCloser } from "@nostr/tools/abstract-pool"
 import VoiceNote from "./VoiceNote"
 import user from "./user"
 import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group"
-import { DefinedTab, getRequestDeclaration, Tab } from "./nostr"
-
-const global: DefinedTab = [
-  "Global",
-  {
-    type: "relays",
-    relays: ["wss://relay.damus.io", "wss://nos.lol", "wss://nostr.wine", "wss://relay.nostr.band"]
-  }
-]
+import { DefinedTab, getRequestDeclaration, global, Tab } from "./nostr"
 
 function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) {
   const [tab, setTab] = createSignal<DefinedTab>(props.forcedTabs ? props.forcedTabs[0] : global)
@@ -41,7 +33,9 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
 
     if (closer) closer.close()
 
-    const requestMap = await getRequestDeclaration(selected[1], [{ kinds: [1222] }])
+    const requestMap = await getRequestDeclaration(selected[1], [
+      { ...(selected[1].baseFilter || {}), kinds: [1222] }
+    ])
     let eosed = true
     let events: NostrEvent[] = []
     closer = pool.subscribeMap(requestMap, {

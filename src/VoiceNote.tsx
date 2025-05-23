@@ -6,7 +6,7 @@ import { neventEncode, npubEncode } from "@nostr/tools/nip19"
 import { onMount, createResource, createSignal, onCleanup, For, Show, createEffect } from "solid-js"
 import { toast } from "solid-sonner"
 import { A, useLocation, useNavigate } from "@solidjs/router"
-import { Badge, Copy, Heart, Mic, MoreVertical, Share2, Trash2, Zap } from "lucide-solid"
+import { Copy, Heart, Mic, MoreVertical, Share2, Trash2, Zap } from "lucide-solid"
 import { pool } from "@nostr/gadgets/global"
 import { loadRelayList } from "@nostr/gadgets/lists"
 import { SubCloser } from "@nostr/tools/abstract-pool"
@@ -35,6 +35,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "./components/ui/avatar"
 import settings from "./settings"
 import nwc from "./nwc"
 import Create from "./Create"
+import { Badge } from "./components/ui/badge"
 
 function VoiceNote(props: { event: NostrEvent }) {
   const [author] = createResource(props.event.pubkey, loadNostrUser)
@@ -246,8 +247,8 @@ function VoiceNote(props: { event: NostrEvent }) {
               </audio>
             </div>
 
-            {/* Hashtags display */}
-            {!isReply && hashtags.length > 0 && (
+            {/* hashtags */}
+            {!isReply() && hashtags().length > 0 && (
               <div class="mt-2 flex flex-wrap gap-2">
                 <For each={hashtags()}>
                   {tag => (
@@ -256,7 +257,9 @@ function VoiceNote(props: { event: NostrEvent }) {
                       onClick={e => e.stopPropagation()}
                       class="no-underline"
                     >
-                      <Badge class="hover:bg-accent">#{tag}</Badge>
+                      <Badge variant="secondary" class="hover:bg-accent">
+                        #{tag}
+                      </Badge>
                     </A>
                   )}
                 </For>

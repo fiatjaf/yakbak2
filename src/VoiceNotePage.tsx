@@ -78,7 +78,7 @@ function VoiceNotePage() {
       inbox,
       {
         kinds: [1244],
-        "#e": [parent.id],
+        "#E": [parent.id],
         limit: 30
       },
       {

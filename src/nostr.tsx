@@ -2,8 +2,18 @@ import { loadRelayList } from "@nostr/gadgets/lists"
 import { Filter } from "@nostr/tools/filter"
 import { normalizeURL } from "@nostr/tools/utils"
 
-export type Tab = { type: "relays"; relays: string[] } | { type: "users"; pubkeys: string[] }
+export type Tab = {
+  baseFilter?: Filter
+} & ({ type: "relays"; relays: string[] } | { type: "users"; pubkeys: string[] })
 export type DefinedTab = [string, Tab]
+
+export const global: DefinedTab = [
+  "Global",
+  {
+    type: "relays",
+    relays: ["wss://relay.damus.io", "wss://nos.lol", "wss://nostr.wine", "wss://relay.nostr.band"]
+  }
+]
 
 /**
  * Returns a map of {relayUrl: [filter]} to be passed to pool.subscribeMap() according to the
