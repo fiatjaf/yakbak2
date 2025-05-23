@@ -72,6 +72,7 @@ async function makeUserLogin(data: string): Promise<User> {
       localStorage.setItem("nostr:nip46:clientkey", bytesToHex(clientKey))
     }
     const bunker = new BunkerSigner(clientKey, bp)
+    await bunker.connect()
     pubkey = await bunker.getPublicKey()
     signer = bunker
   } else {

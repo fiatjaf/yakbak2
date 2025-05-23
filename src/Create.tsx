@@ -170,7 +170,7 @@ function Create(props: { replyingTo?: NostrEvent; children: JSXElement }) {
                     <Input
                       placeholder="Add hashtag (max 3)"
                       value={newHashtag()}
-                      onChange={e => setNewHashtag(e.target.value)}
+                      onInput={e => setNewHashtag(e.target.value)}
                       maxLength={30}
                       class="flex-1"
                     />

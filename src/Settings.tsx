@@ -43,7 +43,7 @@ function Settings() {
                 <Input
                   id="nwc"
                   value={nwcConnectionString()}
-                  onChange={e => setNwcConnectionString(e.target.value)}
+                  onInput={e => setNwcConnectionString(e.target.value)}
                   placeholder="nostr+walletconnect://..."
                 />
               </div>
@@ -54,7 +54,7 @@ function Settings() {
                   id="zap-amount"
                   type="number"
                   value={defaultZapAmount()}
-                  onChange={e => setDefaultZapAmount(parseInt(e.target.value))}
+                  onInput={e => setDefaultZapAmount(parseInt(e.target.value))}
                   placeholder="21"
                 />
               </div>

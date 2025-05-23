@@ -70,7 +70,7 @@ function LoginDialog(props: {
                   <Input
                     id="nsec"
                     value={nsec()}
-                    onChange={e => setNsec(e.target.value)}
+                    onInput={e => setNsec(e.target.value)}
                     class="rounded-lg border-gray-300 dark:border-gray-700 focus-visible:ring-primary"
                     placeholder="nsec1..."
                   />
@@ -94,20 +94,20 @@ function LoginDialog(props: {
                 <Input
                   id="bunkerUri"
                   value={bunkerUri()}
-                  onChange={e => setBunkerUri(e.target.value)}
+                  onInput={e => setBunkerUri(e.target.value)}
                   class="rounded-lg border-gray-300 dark:border-gray-700 focus-visible:ring-primary"
                   placeholder="bunker://"
                 />
-                {bunkerUri().trim() && !bunkerUri().startsWith("bunker://") && (
+                <Show when={bunkerUri().trim() && !bunkerUri().startsWith("bunker://")}>
                   <p class="text-red-500 text-xs">URI must start with bunker://</p>
-                )}
+                </Show>
               </div>
 
               <Button
                 class="w-full rounded-full py-6"
                 onClick={handleBunkerLogin}
                 disabled={
-                  isLoading() || !!bunkerUri().trim() || !bunkerUri().startsWith("bunker://")
+                  isLoading() || !bunkerUri().trim() || !bunkerUri().startsWith("bunker://")
                 }
               >
                 {isLoading() ? "Connecting..." : "Login with Bunker"}
