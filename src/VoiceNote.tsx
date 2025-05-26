@@ -183,7 +183,7 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
               </A>
               <div class="flex items-center gap-2">
                 <span
-                  class="text-sm text-muted-foreground hover:underline"
+                  class="text-sm text-muted-foreground hover:underline cursor-pointer"
                   onClick={maybeNavigateToNote}
                 >
                   {new Date(props.event.created_at * 1000).toLocaleString()}
@@ -291,6 +291,7 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
                   variant="outline"
                   class="cursor-pointer font-normal hover:bg-secondary text-xs px-1"
                   onClick={maybeNavigateToNote}
+                  title={nevent()}
                 >
                   {nevent().slice(-5)}
                 </Badge>

@@ -206,7 +206,7 @@ function VoiceNotePage() {
 
   function ThreadWrapper(props: SubThread) {
     return (
-      <div class={`ml-4`}>
+      <div class="translate-x-4">
         <VoiceNote
           event={props.event}
           class={`${props.event.id === event()?.id ? "border-sky-400 border-2" : "border-primary/20"}`}
