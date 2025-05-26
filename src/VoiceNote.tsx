@@ -6,7 +6,7 @@ import { decode, EventPointer, neventEncode, npubEncode } from "@nostr/tools/nip
 import { onMount, createResource, createSignal, onCleanup, For, Show, createEffect } from "solid-js"
 import { toast } from "solid-sonner"
 import { A, useLocation, useNavigate } from "@solidjs/router"
-import { Copy, Heart, Mic, MoreVertical, Share2, Trash2, Zap } from "lucide-solid"
+import { Copy, Heart, Loader, Mic, MoreVertical, Share2, Trash2, Zap } from "lucide-solid"
 import { pool } from "@nostr/gadgets/global"
 import { loadRelayList } from "@nostr/gadgets/lists"
 import { SubCloser } from "@nostr/tools/abstract-pool"
@@ -60,6 +60,7 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
   const [replyCount, setReplyCount] = createSignal(0)
   const [hasReplied, setHasReplied] = createSignal(false)
   const [zapAmount, setZapAmount] = createSignal(0)
+  const [isZapping, setIsZapping] = createSignal(false)
   const [hasZapped, setHasZapped] = createSignal(false)
   let audioRef: HTMLAudioElement | undefined
 
@@ -267,12 +268,23 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
                   </Show>
                 </Button>
                 <Show when={zapEndpoint() && settings().defaultZapAmount}>
-                  <Button variant="ghost" size="sm" onClick={handleZap} title="Zaps">
-                    <Zap class={`h-5 w-5 ${hasZapped() ? "text-yellow-500 fill-current" : ""}`} />
-                    <Show when={zapAmount() > 0}>
-                      <span class="ml-1 text-sm">{formatZapAmount(Math.round(zapAmount()))}</span>
-                    </Show>
-                  </Button>
+                  <Show
+                    fallback={
+                      <Button variant="ghost" size="sm" onClick={handleZap} title="Zaps">
+                        <Zap
+                          class={`h-5 w-5 ${hasZapped() ? "text-yellow-500 fill-current" : ""}`}
+                        />
+                        <Show when={zapAmount() > 0}>
+                          <span class="ml-1 text-sm">
+                            {formatZapAmount(Math.round(zapAmount()))}
+                          </span>
+                        </Show>
+                      </Button>
+                    }
+                    when={isZapping()}
+                  >
+                    <Loader class="text-yellow-500 animate-spin rounded-full h-8 w-8" />
+                  </Show>
                 </Show>
               </div>
               <div class="flex items-center gap-2">
@@ -425,28 +437,30 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
     const cb = zapEndpoint()
     if (!cb) return
 
-    const zr = await user().current.signer.signEvent(
-      makeZapRequest({
-        profile: props.event.pubkey,
-        event: props.event.id,
-        amount: settings().defaultZapAmount * 1000,
-        relays: [...theirInbox, ...ourOutbox],
-        comment: ""
-      })
-    )
-
-    const { pr: invoice } = await (
-      await fetch(
-        cb +
-          (cb.includes("?") ? "&" : "?") +
-          "amount=" +
-          settings().defaultZapAmount * 1000 +
-          "&nostr=" +
-          JSON.stringify(zr)
-      )
-    ).json()
+    setIsZapping(true)
 
     try {
+      const zr = await user().current.signer.signEvent(
+        makeZapRequest({
+          profile: props.event.pubkey,
+          event: props.event.id,
+          amount: settings().defaultZapAmount * 1000,
+          relays: [...theirInbox, ...ourOutbox],
+          comment: ""
+        })
+      )
+
+      const { pr: invoice } = await (
+        await fetch(
+          cb +
+            (cb.includes("?") ? "&" : "?") +
+            "amount=" +
+            settings().defaultZapAmount * 1000 +
+            "&nostr=" +
+            JSON.stringify(zr)
+        )
+      ).json()
+
       const amount = getSatoshisAmountFromBolt11(invoice)
       await nwc().payInvoice({ invoice })
       toast.success(`Sent ${amount} sats!`)
@@ -454,6 +468,8 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
     } catch (error) {
       console.error("Error sending zap:", error)
       toast.error("Failed to send zap")
+    } finally {
+      setIsZapping(false)
     }
   }
 
