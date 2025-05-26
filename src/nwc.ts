@@ -3,7 +3,7 @@ import { createResource } from "solid-js"
 
 import settings from "./settings"
 
-const [nwc] = createResource(settings(), settings => {
+const [nwc] = createResource(settings, settings => {
   if (!settings || !settings.nwcConnectionString) return
 
   return new NWC.NWCClient({

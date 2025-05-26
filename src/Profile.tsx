@@ -17,17 +17,20 @@ import { pool } from "@nostr/gadgets/global"
 import { Check, Copy, Loader } from "lucide-solid"
 
 function Profile() {
-  const { npub } = useParams<{ npub: string }>()
-  const [author] = createResource(npub, async npub => {
-    const { type, data } = decode(npub)
-    if (type === "npub") {
-      return loadNostrUser(data)
-    } else if (type === "nprofile") {
-      return loadNostrUser(data.pubkey)
-    } else {
-      throw new Error(`unexpected profile ${npub}`)
+  const params = useParams<{ npub: string }>()
+  const [author] = createResource(
+    () => params.npub,
+    async npub => {
+      const { type, data } = decode(npub)
+      if (type === "npub") {
+        return loadNostrUser(data)
+      } else if (type === "nprofile") {
+        return loadNostrUser(data.pubkey)
+      } else {
+        throw new Error(`unexpected profile ${npub}`)
+      }
     }
-  })
+  )
   const [validNIP05] = createResource(
     author,
     async a => a.metadata?.nip05 && (await isValid(a.pubkey, a.metadata.nip05 as Nip05))

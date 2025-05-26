@@ -2,7 +2,7 @@ import { bech32 } from "@scure/base"
 import { loadNostrUser } from "@nostr/gadgets/metadata"
 import { makeZapRequest } from "@nostr/tools/nip57"
 import { NostrEvent } from "@nostr/tools/pure"
-import { neventEncode, npubEncode } from "@nostr/tools/nip19"
+import { decode, EventPointer, neventEncode, npubEncode } from "@nostr/tools/nip19"
 import { onMount, createResource, createSignal, onCleanup, For, Show, createEffect } from "solid-js"
 import { toast } from "solid-sonner"
 import { A, useLocation, useNavigate } from "@solidjs/router"
@@ -28,23 +28,30 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "./components/ui/dropdown-menu"
+import { Avatar, AvatarFallback, AvatarImage } from "./components/ui/avatar"
+import { Badge } from "./components/ui/badge"
+import { cn } from "./components/utils"
 
 import user from "./user"
 import { formatZapAmount, getSatoshisAmountFromBolt11 } from "./utils"
-import { Avatar, AvatarFallback, AvatarImage } from "./components/ui/avatar"
 import settings from "./settings"
 import nwc from "./nwc"
 import Create from "./Create"
-import { Badge } from "./components/ui/badge"
 
-function VoiceNote(props: { event: NostrEvent }) {
-  const [author] = createResource(props.event.pubkey, loadNostrUser)
+function VoiceNote(props: { event: NostrEvent; class?: string }) {
+  const [author] = createResource(() => props.event.pubkey, loadNostrUser)
   const nevent = () =>
     neventEncode({
       id: props.event.id,
       author: props.event.pubkey,
       relays: Array.from(pool.seenOn.get(props.event.id)).map(r => r.url)
     })
+  const relays = () =>
+    Array.from(pool.seenOn.get(props.event.id))
+      .slice(0, 3)
+      .map(r => r.url)
+      .map(url => (url.startsWith("wss://") ? url.substring(6) : url))
+      .map(url => (url.endsWith("/") ? url.slice(0, -1) : url))
   const npub = npubEncode(props.event.pubkey)
   const navigate = useNavigate()
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = createSignal(false)
@@ -57,7 +64,6 @@ function VoiceNote(props: { event: NostrEvent }) {
   let audioRef: HTMLAudioElement | undefined
 
   const location = useLocation()
-  const isMessagePage = location.pathname.startsWith("/nevent1")
 
   let theirInbox: string[] = []
   let ourOutbox: string[] = []
@@ -157,22 +163,9 @@ function VoiceNote(props: { event: NostrEvent }) {
   const isReply = () => !!props.event.tags.find(tag => tag[0] === "e")
 
   return (
-    <div class={`block rounded-lg transition-colors hover:bg-accent/50 cursor-pointer`}>
-      <Card class="p-4">
+    <div class="block rounded-lg transition-colors hover:bg-accent/50 py-2">
+      <Card class={cn(props.class, "p-4")}>
         <div class="flex items-start space-x-4">
-          <div class="flex-shrink-0">
-            <A
-              href={`/${npub}`}
-              onClick={e => e.stopPropagation()}
-              tabIndex={0}
-              aria-label={`View profile of ${author()?.shortName}`}
-            >
-              <Avatar class="h-10 w-10">
-                <AvatarImage src={author()?.image} alt="avatar" />
-                <AvatarFallback>{author()?.npub.slice(-2)}</AvatarFallback>
-              </Avatar>
-            </A>
-          </div>
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between">
               <A
@@ -180,25 +173,18 @@ function VoiceNote(props: { event: NostrEvent }) {
                 onClick={e => e.stopPropagation()}
                 tabIndex={0}
                 aria-label={`View profile of ${author()?.shortName}`}
-                class="font-medium cursor-pointer hover:underline"
+                class="font-medium cursor-pointer hover:underline flex items-center gap-2"
               >
-                {author()?.shortName}
+                <Avatar class="h-10 w-10">
+                  <AvatarImage src={author()?.image} alt="avatar" />
+                  <AvatarFallback>{author()?.npub.slice(-2)}</AvatarFallback>
+                </Avatar>
+                <div>{author()?.shortName}</div>
               </A>
               <div class="flex items-center gap-2">
                 <span
                   class="text-sm text-muted-foreground hover:underline"
-                  onClick={e => {
-                    if (
-                      isMessagePage ||
-                      (e.target instanceof HTMLElement &&
-                        (e.target.closest("button") ||
-                          e.target.closest("a") ||
-                          e.target.closest('[role="menu"]')))
-                    ) {
-                      return
-                    }
-                    navigate(`/${nevent()}`)
-                  }}
+                  onClick={maybeNavigateToNote}
                 >
                   {new Date(props.event.created_at * 1000).toLocaleString()}
                 </span>
@@ -266,27 +252,49 @@ function VoiceNote(props: { event: NostrEvent }) {
               </div>
             )}
 
-            <div class="mt-4 flex items-center flex-wrap gap-6">
-              <Create replyingTo={props.event}>
-                <Mic class={`h-5 w-5 ${hasReplied() ? "text-sky-500" : ""}`} />
-                <Show when={replyCount() > 0}>
-                  <span class="ml-1 text-sm">{replyCount()}</span>
-                </Show>
-              </Create>
-              <Button variant="ghost" size="sm" onClick={handleReaction} title="Likes">
-                <Heart class={`h-5 w-5 ${hasReacted() ? "fill-current text-red-500" : ""}`} />
-                <Show when={reactionCount() > 0}>
-                  <span class="ml-1 text-sm">{reactionCount()}</span>
-                </Show>
-              </Button>
-              <Show when={zapEndpoint() && settings().defaultZapAmount}>
-                <Button variant="ghost" size="sm" onClick={handleZap} title="Zaps">
-                  <Zap class={`h-5 w-5 ${hasZapped() ? "text-yellow-500 fill-current" : ""}`} />
-                  <Show when={zapAmount() > 0}>
-                    <span class="ml-1 text-sm">{formatZapAmount(Math.round(zapAmount()))}</span>
+            <div class="mt-4 flex items-center justify-between mr-2">
+              <div class="flex items-center gap-2">
+                <Create replyingTo={props.event}>
+                  <Mic class={`h-5 w-5 ${hasReplied() ? "text-sky-500" : ""}`} />
+                  <Show when={replyCount() > 0}>
+                    <span class="ml-1 text-sm">{replyCount()}</span>
+                  </Show>
+                </Create>
+                <Button variant="ghost" size="sm" onClick={handleReaction} title="Likes">
+                  <Heart class={`h-5 w-5 ${hasReacted() ? "fill-current text-red-500" : ""}`} />
+                  <Show when={reactionCount() > 0}>
+                    <span class="ml-1 text-sm">{reactionCount()}</span>
                   </Show>
                 </Button>
-              </Show>
+                <Show when={zapEndpoint() && settings().defaultZapAmount}>
+                  <Button variant="ghost" size="sm" onClick={handleZap} title="Zaps">
+                    <Zap class={`h-5 w-5 ${hasZapped() ? "text-yellow-500 fill-current" : ""}`} />
+                    <Show when={zapAmount() > 0}>
+                      <span class="ml-1 text-sm">{formatZapAmount(Math.round(zapAmount()))}</span>
+                    </Show>
+                  </Button>
+                </Show>
+              </div>
+              <div class="flex items-center gap-2">
+                <For each={relays()}>
+                  {url => (
+                    <Badge
+                      variant="outline"
+                      class="cursor-pointer font-normal text-xs max-w-36 px-1 text-ellipsis overflow-hidden hover:bg-secondary"
+                      onClick={() => maybeNavigateToRelay(url)}
+                    >
+                      {url}
+                    </Badge>
+                  )}
+                </For>
+                <Badge
+                  variant="outline"
+                  class="cursor-pointer font-normal hover:bg-secondary text-xs px-1"
+                  onClick={maybeNavigateToNote}
+                >
+                  {nevent().slice(-5)}
+                </Badge>
+              </div>
             </div>
 
             <Dialog open={isDeleteDialogOpen()} onOpenChange={setIsDeleteDialogOpen}>
@@ -313,6 +321,29 @@ function VoiceNote(props: { event: NostrEvent }) {
       </Card>
     </div>
   )
+
+  function maybeNavigateToNote() {
+    if (
+      location.pathname.startsWith("/nevent1") &&
+      (decode(location.pathname.split("/")[1]).data as EventPointer).id === props.event.id
+    ) {
+      // we're already there
+      return
+    }
+
+    navigate(`/${nevent()}`)
+  }
+
+  function maybeNavigateToRelay(url: string) {
+    const encoded = encodeURIComponent(url)
+
+    if (location.pathname.startsWith("/r/" + encoded)) {
+      // don't navigate in this case
+      return
+    }
+
+    navigate(`/r/${encoded}`)
+  }
 
   async function handleDelete() {
     let ourOutbox = (await loadRelayList(user().current.pubkey)).items

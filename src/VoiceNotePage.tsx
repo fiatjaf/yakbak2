@@ -1,45 +1,44 @@
 import { decode, EventPointer } from "@nostr/tools/nip19"
 import { NostrEvent } from "@nostr/tools/pure"
+import { Loader } from "lucide-solid"
+import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
-import {
-  createResource,
-  createEffect,
-  createSignal,
-  For,
-  onCleanup,
-  Show,
-  Switch,
-  Match
-} from "solid-js"
+import { createResource, createEffect, For, onCleanup, Show, Switch, Match, batch } from "solid-js"
 import { pool } from "@nostr/gadgets/global"
 import { loadRelayList } from "@nostr/gadgets/lists"
 import { SubCloser } from "@nostr/tools/abstract-pool"
 
 import VoiceNote from "./VoiceNote"
-import { Card } from "./components/ui/card"
-import { Loader } from "lucide-solid"
+
+type SubThread = {
+  event: NostrEvent
+  children: SubThread[]
+}
 
 function VoiceNotePage() {
-  const { nevent } = useParams<{ nevent: string }>()
+  const params = useParams<{ nevent: string }>()
 
-  const [event] = createResource(nevent, async () => {
-    const ptr = decode(nevent).data as EventPointer
-    if (ptr.relays) {
-      let res = await pool.querySync(ptr.relays, { ids: [ptr.id] }, { label: "note-1st" })
-      if (res.length) return res[0]
+  const [event] = createResource(
+    () => params.nevent,
+    async nevent => {
+      const ptr = decode(nevent).data as EventPointer
+      if (ptr.relays) {
+        let res = await pool.querySync(ptr.relays, { ids: [ptr.id] }, { label: "note-1st" })
+        if (res.length) return res[0]
+      }
+      let outboxMinusHint = (await loadRelayList(ptr.author)).items
+        .filter(r => r.write && ptr.relays.indexOf(r.url) === -1)
+        .slice(0, 4)
+        .map(r => r.url)
+      const res = await pool.querySync(outboxMinusHint, { ids: [ptr.id] }, { label: "note-2nd" })
+      if (res.length === 0) throw new Error(`couldn't find event ${ptr.id}`)
+      return res[0]
     }
-    let outboxMinusHint = (await loadRelayList(ptr.author)).items
-      .filter(r => r.write && ptr.relays.indexOf(r.url) === -1)
-      .slice(0, 4)
-      .map(r => r.url)
-    const res = await pool.querySync(outboxMinusHint, { ids: [ptr.id] }, { label: "note-2nd" })
-    if (res.length === 0) throw new Error(`couldn't find event ${ptr.id}`)
-    return res[0]
-  })
+  )
 
   const [root] = createResource<NostrEvent | null, NostrEvent>(event, async (event: NostrEvent) => {
     const tag = event.tags.find(t => t[0] === "E")
-    if (!tag) return null
+    if (!tag) return event
 
     const id = tag[1]
     const hint = tag[2]
@@ -47,25 +46,58 @@ function VoiceNotePage() {
       let res = await pool.querySync([hint], { ids: [id] }, { label: "parent-1st" })
       if (res.length) return res[0]
     }
+
+    // try relays from the author if there is an author hint
     const author = tag[3]
-    let outboxMinusHint = (await loadRelayList(author)).items
-      .filter(r => r.write && r.url !== hint)
-      .slice(0, 4)
+    let authorOutboxMinusHint: string[] = []
+    if (author) {
+      authorOutboxMinusHint = (await loadRelayList(author)).items
+        .filter(r => r.write && r.url !== hint)
+        .slice(0, 4)
+        .map(r => r.url)
+      const res = await pool.querySync(
+        authorOutboxMinusHint,
+        { ids: [id] },
+        { label: "parent-2nd" }
+      )
+      if (res.length) return res[0]
+    }
+
+    // now try the same relays this note was found in
+    const sameRelayMinusHintAndOutbox = Array.from(pool.seenOn.get(event.id))
       .map(r => r.url)
-    const res = await pool.querySync(outboxMinusHint, { ids: [id] }, { label: "parent-2nd" })
-    return res[0] || null
+      .filter(url => url !== hint && authorOutboxMinusHint.indexOf(url) === -1)
+    const res = await pool.querySync(
+      sameRelayMinusHintAndOutbox,
+      { ids: [id] },
+      { label: "parent-3nd" }
+    )
+    if (res.length) return res[0]
+
+    // fallback to treating this as the root if none other is found
+    return event
   })
 
-  const [replies, setReplies] = createSignal<NostrEvent[]>([])
+  const [thread, setThread] = createStore<Record<string, SubThread>>({})
 
   let closer: SubCloser
   createEffect(async () => {
-    const parent = event()
-    if (!parent) return
-    const inbox = (await loadRelayList(parent.pubkey)).items
+    const root_ = root()
+    if (!root_) return
+
+    let inbox = (await loadRelayList(root_.pubkey)).items
       .filter(r => r.read)
       .slice(0, 4)
       .map(r => r.url)
+
+    if (root_.id !== event()?.id) {
+      inbox = inbox.concat(
+        (await loadRelayList(event().pubkey)).items
+          .filter(r => r.read)
+          .slice(0, 4)
+          .map(r => r.url)
+      )
+    }
 
     let eosed = false
     let waiting: NostrEvent[] = []
@@ -76,21 +108,50 @@ function VoiceNotePage() {
       inbox,
       {
         kinds: [1244],
-        "#e": [parent.id],
+        "#E": [root_.id],
         limit: 30
       },
       {
         label: "replies-n",
         onevent(event) {
           if (eosed) {
-            setReplies(replies => [event, ...replies])
+            const parentId = event.tags.find(t => t[0] === "e")[1]
+            if (parentId && parentId !== root_.id) {
+              if (!(parentId in thread)) {
+                console.warn("couldn't find the parent for", event, "in the thread")
+                return
+              }
+              batch(() => {
+                const subt = { event, children: [] }
+                setThread(parentId, "children", thread[parentId].children.length, subt)
+                setThread(event.id, subt)
+              })
+            }
           } else {
             waiting.push(event)
           }
         },
         oneose() {
           waiting.sort((a, b) => b.created_at - a.created_at)
-          setReplies(waiting)
+          const thread: Record<string, SubThread> = {}
+
+          for (let i = waiting.length - 1; i >= 0; i--) {
+            const event = waiting[i]
+            const parentId = event.tags.find(t => t[0] === "e")[1]
+            if (parentId && parentId !== root_.id) {
+              const parent = thread[parentId]
+              if (!parent) {
+                console.warn("couldn't find the parent for", event, "in the thread")
+                continue
+              }
+              const subt = { event, children: [] }
+              parent.children.push(subt)
+              thread[event.id] = subt
+            }
+            thread[event.id] = { event, children: [] }
+          }
+
+          setThread(thread)
           waiting = null
           eosed = true
         }
@@ -106,7 +167,7 @@ function VoiceNotePage() {
     <Switch>
       <Match when={event.error}>
         <div class="container mx-auto px-4 py-8 max-w-2xl">
-          <div class="text-center">Invalid message</div>
+          <div class="text-center">Something went wrong: {String(event.error)}</div>
         </div>
       </Match>
       <Match when={event.loading}>
@@ -118,46 +179,42 @@ function VoiceNotePage() {
       </Match>
       <Match when={!event()}>
         <div class="container mx-auto px-4 py-8 max-w-2xl">
-          <div class="text-center">Message not found</div>
+          <div class="text-center">Voice note not found</div>
         </div>
       </Match>
-      <Match when={true}>
+      <Match when={root()}>
         <div class="container mx-auto px-4 py-8 max-w-2xl">
-          {/* Show root message if this is a reply */}
-          <Show when={root()}>
-            <div class="mb-2">
-              <Card class="p-4 border-2 border-primary/40 bg-muted/50">
-                <VoiceNote event={root()} />
-              </Card>
-            </div>
-          </Show>
-          {/* if root is shown, nest the current message visually */}
-          <div class={root() ? "ml-6 border-l-2 border-primary/30 pl-4" : ""}>
-            <Show when={root()}>
-              <div class="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wide">
-                Reply
-              </div>
-            </Show>
-            <VoiceNote event={event()} />
+          <div class="mb-2">
+            <VoiceNote
+              event={root()}
+              class={event()?.id === root()?.id ? "border-sky-400 border-2" : "border-primary/20"}
+            />
           </div>
-          <Show when={replies()?.length > 0}>
-            <h2 class="text-lg font-semibold my-6">Replies</h2>
-            <Show when={replies().length > 0}>
-              <div class="space-y-4">
-                <For each={replies()}>
-                  {reply => (
-                    <div class="ml-6 border-l-2 border-primary/20 pl-4">
-                      <VoiceNote event={reply} />
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
+          <Show when={Object.keys(thread).length > 0}>
+            <For each={Object.values(thread)}>
+              {subt => (
+                <Show when={subt.event.tags.find(t => t[0] === "e")[1] === root().id}>
+                  <ThreadWrapper {...subt} />
+                </Show>
+              )}
+            </For>
           </Show>
         </div>
       </Match>
     </Switch>
   )
+
+  function ThreadWrapper(props: SubThread) {
+    return (
+      <div class={`ml-4`}>
+        <VoiceNote
+          event={props.event}
+          class={`${props.event.id === event()?.id ? "border-sky-400 border-2" : "border-primary/20"}`}
+        />
+        <For each={props.children}>{subt => <ThreadWrapper {...subt} />}</For>
+      </div>
+    )
+  }
 }
 
 export default VoiceNotePage
