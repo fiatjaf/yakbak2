@@ -301,21 +301,23 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
                   </Show>
                 </Show>
               </div>
-              <div class="flex items-center gap-2">
-                <For each={relays()}>
-                  {url => (
-                    <Badge
-                      variant="outline"
-                      class="cursor-pointer font-normal text-xs max-w-36 px-1 text-ellipsis overflow-hidden hover:bg-secondary"
-                      onClick={() => maybeNavigateToRelay(url)}
-                    >
-                      {url}
-                    </Badge>
-                  )}
-                </For>
+              <div class="flex flex items-center gap-2">
+                <div class="hidden sm:flex items-center gap-2">
+                  <For each={relays()}>
+                    {url => (
+                      <Badge
+                        variant="outline"
+                        class="cursor-pointer font-normal text-xs max-w-36 px-1 text-ellipsis overflow-hidden hover:bg-secondary"
+                        onClick={() => maybeNavigateToRelay(url)}
+                      >
+                        {url}
+                      </Badge>
+                    )}
+                  </For>
+                </div>
                 <Badge
                   variant="outline"
-                  class="cursor-pointer font-normal hover:bg-secondary text-xs px-1"
+                  class="hidden md:block cursor-pointer font-normal hover:bg-secondary text-xs px-1"
                   onClick={maybeNavigateToNote}
                   title={nevent()}
                 >

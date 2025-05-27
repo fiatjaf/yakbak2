@@ -96,6 +96,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
 
     if (!user()?.current) {
       setVisibleTabs([global])
+      return
     }
 
     loadFollowsList(user().current.pubkey).then(follows => {
