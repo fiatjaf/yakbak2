@@ -81,82 +81,83 @@ function VoiceNotePage() {
   const [thread, setThread] = createStore<Record<string, SubThread>>({})
 
   let closer: SubCloser
-  createEffect(async () => {
+  createEffect(() => {
     const root_ = root()
     if (!root_) return
+    ;(async () => {
+      let inbox = (await loadRelayList(root_.pubkey)).items
+        .filter(r => r.read)
+        .slice(0, 4)
+        .map(r => r.url)
 
-    let inbox = (await loadRelayList(root_.pubkey)).items
-      .filter(r => r.read)
-      .slice(0, 4)
-      .map(r => r.url)
-
-    if (root_.id !== event()?.id) {
-      inbox = inbox.concat(
-        (await loadRelayList(event().pubkey)).items
-          .filter(r => r.read)
-          .slice(0, 4)
-          .map(r => r.url)
-      )
-    }
-
-    let eosed = false
-    let waiting: NostrEvent[] = []
-
-    if (closer) closer.close()
-
-    closer = pool.subscribe(
-      inbox,
-      {
-        kinds: [1244],
-        "#E": [root_.id],
-        limit: 30
-      },
-      {
-        label: "replies-n",
-        onevent(event) {
-          if (eosed) {
-            const parentId = event.tags.find(t => t[0] === "e")[1]
-            if (parentId && parentId !== root_.id) {
-              if (!(parentId in thread)) {
-                console.warn("couldn't find the parent for", event, "in the thread")
-                return
-              }
-              batch(() => {
-                const subt = { event, children: [] }
-                setThread(parentId, "children", thread[parentId].children.length, subt)
-                setThread(event.id, subt)
-              })
-            }
-          } else {
-            waiting.push(event)
-          }
-        },
-        oneose() {
-          waiting.sort((a, b) => b.created_at - a.created_at)
-          const thread: Record<string, SubThread> = {}
-
-          for (let i = waiting.length - 1; i >= 0; i--) {
-            const event = waiting[i]
-            const parentId = event.tags.find(t => t[0] === "e")[1]
-            if (parentId && parentId !== root_.id) {
-              const parent = thread[parentId]
-              if (!parent) {
-                console.warn("couldn't find the parent for", event, "in the thread")
-                continue
-              }
-              const subt = { event, children: [] }
-              parent.children.push(subt)
-              thread[event.id] = subt
-            }
-            thread[event.id] = { event, children: [] }
-          }
-
-          setThread(thread)
-          waiting = null
-          eosed = true
-        }
+      if (root_.id !== event()?.id) {
+        inbox = inbox.concat(
+          (await loadRelayList(event().pubkey)).items
+            .filter(r => r.read)
+            .slice(0, 4)
+            .map(r => r.url)
+        )
       }
-    )
+
+      let eosed = false
+      let waiting: NostrEvent[] = []
+
+      if (closer) closer.close()
+
+      closer = pool.subscribe(
+        inbox,
+        {
+          kinds: [1244],
+          "#E": [root_.id],
+          limit: 30
+        },
+        {
+          label: "replies-n",
+          onevent(event) {
+            if (eosed) {
+              const parentId = event.tags.find(t => t[0] === "e")[1]
+              if (parentId && parentId !== root_.id) {
+                if (!(parentId in thread)) {
+                  console.warn("couldn't find the parent for", event, "in the thread")
+                  return
+                }
+                batch(() => {
+                  const subt = { event, children: [] }
+                  setThread(parentId, "children", thread[parentId].children.length, subt)
+                  setThread(event.id, subt)
+                })
+              }
+            } else {
+              waiting.push(event)
+            }
+          },
+          oneose() {
+            waiting.sort((a, b) => b.created_at - a.created_at)
+            const thread: Record<string, SubThread> = {}
+
+            for (let i = waiting.length - 1; i >= 0; i--) {
+              const event = waiting[i]
+              const parentId = event.tags.find(t => t[0] === "e")[1]
+              if (parentId && parentId !== root_.id) {
+                const parent = thread[parentId]
+                if (!parent) {
+                  console.warn("couldn't find the parent for", event, "in the thread")
+                  continue
+                }
+                const subt = { event, children: [] }
+                parent.children.push(subt)
+                thread[event.id] = subt
+              }
+              thread[event.id] = { event, children: [] }
+            }
+
+            setThread(thread)
+            waiting = null
+            eosed = true
+          }
+        }
+      )
+    })()
   })
 
   onCleanup(() => {

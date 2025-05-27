@@ -36,10 +36,12 @@ function Profile() {
     async a => a.metadata?.nip05 && (await isValid(a.pubkey, a.metadata.nip05 as Nip05))
   )
   const [isFollowing, setIsFollowing] = createSignal(false)
-  createEffect(async () => {
+  createEffect(() => {
     if (!user() || !user().current || !author()) return
-    const follows = await loadFollowsList(user().current.pubkey)
-    setIsFollowing(follows.items.some(pk => pk === author().pubkey))
+
+    loadFollowsList(user().current.pubkey).then(follows => {
+      setIsFollowing(follows.items.some(pk => pk === author().pubkey))
+    })
   })
 
   return (
@@ -65,9 +67,10 @@ function Profile() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(author().npub)
-                          toast.success("npub copied to clipboard")
+                        onClick={() => {
+                          navigator.clipboard.writeText(author().npub).then(() => {
+                            toast.success("npub copied to clipboard")
+                          })
                         }}
                         title="Copy npub"
                       >

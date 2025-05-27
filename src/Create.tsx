@@ -1,7 +1,7 @@
 import { ArrowUpToLine, Hash, Loader, Mic, MicOff, Pause, Play, Trash2 } from "lucide-solid"
 import { toast } from "solid-sonner"
 import {
-  createEffect,
+  createResource,
   createSignal,
   For,
   JSXElement,
@@ -29,9 +29,12 @@ function Create(props: {
   children?: JSXElement
   vanishesOnScroll?: boolean
 }) {
+  // eslint-disable-next-line solid/reactivity
   const [isRecording, setIsRecording] = props.replyingTo
     ? [
+        // eslint-disable-next-line solid/reactivity
         () => recordingReply() === props.replyingTo.id,
+        // eslint-disable-next-line solid/reactivity
         (is: boolean) => setRecordingReply(is ? props.replyingTo.id : "")
       ]
     : [recordingRoot, setRecordingRoot]
@@ -47,16 +50,19 @@ function Create(props: {
 
   let audioRef: HTMLAudioElement | undefined
   let mediaRecorder: MediaRecorder | undefined
-  let outbox: string[] = []
 
-  createEffect(async () => {
-    if (!user()?.current) return
+  const [ourOutbox] = createResource(
+    user,
+    async user => {
+      if (!user?.current) return []
 
-    outbox = (await loadRelayList(user().current.pubkey)).items
-      .filter(r => r.write)
-      .slice(0, 4)
-      .map(r => r.url)
-  })
+      return (await loadRelayList(user.current.pubkey)).items
+        .filter(r => r.write)
+        .slice(0, 4)
+        .map(r => r.url)
+    },
+    { initialValue: [] }
+  )
 
   onMount(() => {
     if (props.vanishesOnScroll) window.addEventListener("scroll", handleScroll)
@@ -394,12 +400,12 @@ function Create(props: {
 
       const relays = props.replyingTo
         ? [
-            ...outbox,
+            ...ourOutbox(),
             ...(await loadRelayList(props.replyingTo.pubkey)).items
               .filter(r => r.read)
               .map(r => r.url)
           ]
-        : outbox
+        : ourOutbox()
 
       await Promise.any(pool.publish(relays, event))
 

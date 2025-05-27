@@ -3,7 +3,7 @@ import { loadNostrUser } from "@nostr/gadgets/metadata"
 import { makeZapRequest } from "@nostr/tools/nip57"
 import { NostrEvent } from "@nostr/tools/pure"
 import { decode, EventPointer, neventEncode, npubEncode } from "@nostr/tools/nip19"
-import { onMount, createResource, createSignal, onCleanup, For, Show, createEffect } from "solid-js"
+import { createResource, createSignal, onCleanup, For, Show, createEffect } from "solid-js"
 import { toast } from "solid-sonner"
 import { A, useLocation, useNavigate } from "@solidjs/router"
 import { Copy, Heart, Loader, Mic, MoreVertical, Share2, Trash2, Zap } from "lucide-solid"
@@ -37,6 +37,7 @@ import { formatZapAmount, getSatoshisAmountFromBolt11 } from "./utils"
 import settings from "./settings"
 import nwc from "./nwc"
 import Create from "./Create"
+import { globalRelays } from "./nostr"
 
 function VoiceNote(props: { event: NostrEvent; class?: string }) {
   const [author] = createResource(() => props.event.pubkey, loadNostrUser)
@@ -52,7 +53,7 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
       .map(r => r.url)
       .map(url => (url.startsWith("wss://") ? url.substring(6) : url))
       .map(url => (url.endsWith("/") ? url.slice(0, -1) : url))
-  const npub = npubEncode(props.event.pubkey)
+  const npub = () => npubEncode(props.event.pubkey)
   const navigate = useNavigate()
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = createSignal(false)
   const [hasReacted, setHasReacted] = createSignal(false)
@@ -66,8 +67,6 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
 
   const location = useLocation()
 
-  let theirInbox: string[] = []
-  let ourOutbox: string[] = []
   const [zapEndpoint] = createResource(author, async author => {
     const metadata = author.metadata
     if (!metadata) return undefined
@@ -97,14 +96,12 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
 
   // check if the current user has reacted to this message and get reaction count, zap count, reply count etc
   let closer: SubCloser
-  onMount(async () => {
-    theirInbox = (await loadRelayList(props.event.pubkey)).items
-      .filter(r => r.read)
-      .slice(0, 4)
-      .map(r => r.url)
+  createEffect(() => {
+    if (closer) closer.close()
+    if (theirInbox.loading) return
 
     closer = pool.subscribe(
-      theirInbox,
+      theirInbox(),
       {
         kinds: [7, 9735, 1244],
         "#e": [props.event.id]
@@ -151,14 +148,30 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
     }
   })
 
-  createEffect(async () => {
-    if (!user().current) return
+  const [ourOutbox] = createResource(
+    user,
+    async user => {
+      if (!user?.current) return []
 
-    ourOutbox = (await loadRelayList(user().current.pubkey)).items
-      .filter(r => r.write)
-      .slice(0, 4)
-      .map(r => r.url)
-  })
+      return (await loadRelayList(user.current.pubkey)).items
+        .filter(r => r.write)
+        .slice(0, 4)
+        .map(r => r.url)
+    },
+    {
+      initialValue: []
+    }
+  )
+
+  const [theirInbox] = createResource(
+    () => props.event.pubkey,
+    async pubkey => {
+      return (await loadRelayList(pubkey)).items
+        .filter(r => r.read)
+        .slice(0, 4)
+        .map(r => r.url)
+    }
+  )
 
   const hashtags = () => props.event.tags.filter(t => t[0] === "t").map(t => t[1])
   const isReply = () => !!props.event.tags.find(tag => tag[0] === "e")
@@ -170,7 +183,7 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between">
               <A
-                href={`/${npub}`}
+                href={`/${npub()}`}
                 onClick={e => e.stopPropagation()}
                 tabIndex={0}
                 aria-label={`View profile of ${author()?.shortName}`}
@@ -197,9 +210,10 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
                     <DropdownMenuItem
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(nevent())
-                        toast.success("nevent copied to clipboard")
+                      onClick={() => {
+                        navigator.clipboard.writeText(nevent()).then(() => {
+                          toast.success("nevent copied to clipboard")
+                        })
                       }}
                     >
                       <Copy class="mr-2 h-4 w-4" />
@@ -359,13 +373,8 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
   }
 
   async function handleDelete() {
-    let ourOutbox = (await loadRelayList(user().current.pubkey)).items
-      .filter(r => r.write)
-      .slice(0, 4)
-      .map(r => r.url)
-
     let res = pool.publish(
-      ourOutbox,
+      ourOutbox(),
       await user().current.signer.signEvent({
         created_at: Math.round(Date.now() / 1000),
         kind: 5,
@@ -385,12 +394,12 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
   }
 
   async function handleReaction() {
-    const reactionTargets = [...theirInbox, ...ourOutbox]
+    const reactionTargets = [...(theirInbox() || globalRelays), ...ourOutbox()]
 
     try {
       if (hasReacted()) {
         // find the user's reaction event and delete
-        const userReactions = await pool.querySync(theirInbox, {
+        const userReactions = await pool.querySync(theirInbox() || globalRelays, {
           kinds: [7],
           authors: [user().current.pubkey],
           "#e": [props.event.id]
@@ -445,7 +454,7 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
           profile: props.event.pubkey,
           event: props.event.id,
           amount: settings().defaultZapAmount * 1000,
-          relays: [...theirInbox, ...ourOutbox],
+          relays: [...theirInbox(), ...ourOutbox()],
           comment: ""
         })
       )

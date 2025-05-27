@@ -15,9 +15,11 @@ const NOTES_PER_PAGE = 3
 const INITIAL_THRESHOLD = 7
 
 function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) {
+  // eslint-disable-next-line solid/reactivity
   const [tab, setTab] = createSignal<DefinedTab>(props.forcedTabs ? props.forcedTabs[0] : global)
   const [notes, setNotes] = createSignal<NostrEvent[]>([])
   const [isLoading, setLoading] = createSignal(false)
+  // eslint-disable-next-line solid/reactivity
   const [visibleTabs, setVisibleTabs] = createSignal<[string, Tab][]>(props.forcedTabs ?? [global])
   let allEvents: NostrEvent[] = []
   let threshold = INITIAL_THRESHOLD
@@ -30,48 +32,50 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
     if (closer) closer.close()
   })
 
-  createEffect(async () => {
-    const selected = tab()
-    console.log("starting subscription", selected)
-    allEvents = []
-    threshold = INITIAL_THRESHOLD
-    setLoading(true)
-    setNotes([])
-
+  createEffect(() => {
     if (closer) closer.close()
+    const selected = tab()
 
-    const requestMap = await getRequestDeclaration(selected[1], {
-      ...(selected[1].baseFilter || {}),
-      kinds: [1222],
-      limit: 400 // see note about this under "infinite scroll / pagination"
-    })
-    let eosed = false
-    let doneWaiting = setTimeout(flush, 2800)
-    closer = pool.subscribeMap(requestMap, {
-      label: `feed-${selected[0]}`,
-      onevent(event) {
-        if (event.tags.find(t => t[0] === "e")) return
-        allEvents.push(event)
-        if (eosed) {
-          allEvents.unshift(event)
-          setNotes(events => [event, ...events])
-          threshold++
-        }
-      },
-      oneose() {
-        clearTimeout(doneWaiting)
-        eosed = true
-        flush()
-      }
-    })
+    ;(async () => {
+      console.log("starting subscription", selected)
+      allEvents = []
+      threshold = INITIAL_THRESHOLD
+      setLoading(true)
+      setNotes([])
 
-    function flush() {
-      allEvents.sort((a, b) => b.created_at - a.created_at)
-      batch(() => {
-        setNotes(allEvents.slice(0, threshold))
-        setLoading(false)
+      const requestMap = await getRequestDeclaration(selected[1], {
+        ...(selected[1].baseFilter || {}),
+        kinds: [1222],
+        limit: 400 // see note about this under "infinite scroll / pagination"
       })
-    }
+      let eosed = false
+      let doneWaiting = setTimeout(flush, 2800)
+      closer = pool.subscribeMap(requestMap, {
+        label: `feed-${selected[0]}`,
+        onevent(event) {
+          if (event.tags.find(t => t[0] === "e")) return
+          allEvents.push(event)
+          if (eosed) {
+            allEvents.unshift(event)
+            setNotes(events => [event, ...events])
+            threshold++
+          }
+        },
+        oneose() {
+          clearTimeout(doneWaiting)
+          eosed = true
+          flush()
+        }
+      })
+
+      function flush() {
+        allEvents.sort((a, b) => b.created_at - a.created_at)
+        batch(() => {
+          setNotes(allEvents.slice(0, threshold))
+          setLoading(false)
+        })
+      }
+    })()
   })
 
   // infinite scroll / pagination
@@ -87,15 +91,16 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
     }
   })
 
-  createEffect(async () => {
+  createEffect(() => {
     if (props.forcedTabs) return
 
-    if (user()?.current) {
-      const follows = await loadFollowsList(user().current.pubkey)
-      setVisibleTabs([global, ["Following", { type: "users", pubkeys: follows.items }]])
-    } else {
+    if (!user()?.current) {
       setVisibleTabs([global])
     }
+
+    loadFollowsList(user().current.pubkey).then(follows => {
+      setVisibleTabs([global, ["Following", { type: "users", pubkeys: follows.items }]])
+    })
   })
 
   return (
@@ -150,7 +155,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
         </Switch>
       </div>
 
-      <div ref={ref} class="h-12 w-full flex items-center justify-center"></div>
+      <div ref={ref} class="h-12 w-full flex items-center justify-center" />
 
       {/*
         {isFetchingNextPage ? (

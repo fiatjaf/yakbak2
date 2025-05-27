@@ -1,18 +1,23 @@
-import { loadRelayList } from "@nostr/gadgets/lists"
 import { outboxFilterRelayBatch } from "@nostr/gadgets/outbox"
 import { Filter } from "@nostr/tools/filter"
-import { normalizeURL } from "@nostr/tools/utils"
 
 export type Tab = {
   baseFilter?: Filter
 } & ({ type: "relays"; relays: string[] } | { type: "users"; pubkeys: string[] })
 export type DefinedTab = [string, Tab]
 
+export const globalRelays = [
+  "wss://relay.damus.io",
+  "wss://nos.lol",
+  "wss://nostr.wine",
+  "wss://relay.nostr.band"
+]
+
 export const global: DefinedTab = [
   "Global",
   {
     type: "relays",
-    relays: ["wss://relay.damus.io", "wss://nos.lol", "wss://nostr.wine", "wss://relay.nostr.band"]
+    relays: globalRelays
   }
 ]
 
