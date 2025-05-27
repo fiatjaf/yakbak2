@@ -1,6 +1,10 @@
-import type { Component, ComponentProps, JSX, ValidComponent } from "solid-js"
-import { splitProps } from "solid-js"
-
+import {
+  type Component,
+  type ComponentProps,
+  type JSX,
+  type ValidComponent,
+  splitProps
+} from "solid-js"
 import * as DialogPrimitive from "@kobalte/core/dialog"
 import type { PolymorphicProps } from "@kobalte/core/polymorphic"
 

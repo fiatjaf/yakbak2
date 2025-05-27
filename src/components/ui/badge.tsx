@@ -1,8 +1,5 @@
-import type { Component, ComponentProps } from "solid-js"
-import { splitProps } from "solid-js"
-
-import type { VariantProps } from "class-variance-authority"
-import { cva } from "class-variance-authority"
+import { type Component, type ComponentProps, splitProps } from "solid-js"
+import { type VariantProps, cva } from "class-variance-authority"
 
 import { cn } from "../utils"
 

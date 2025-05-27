@@ -1,5 +1,4 @@
 import type { Component, ComponentProps } from "solid-js"
-
 import { Toaster as Sonner } from "solid-sonner"
 
 type ToasterProps = ComponentProps<typeof Sonner>

@@ -1,5 +1,4 @@
-import type { Component, ComponentProps } from "solid-js"
-import { splitProps } from "solid-js"
+import { type Component, type ComponentProps, splitProps } from "solid-js"
 
 import { cn } from "../utils"
 

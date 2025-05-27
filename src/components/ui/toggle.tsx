@@ -1,10 +1,7 @@
-import type { ValidComponent } from "solid-js"
-import { splitProps } from "solid-js"
-
+import { type ValidComponent, splitProps } from "solid-js"
 import type { PolymorphicProps } from "@kobalte/core/polymorphic"
 import * as ToggleButtonPrimitive from "@kobalte/core/toggle-button"
-import { cva } from "class-variance-authority"
-import type { VariantProps } from "class-variance-authority"
+import { type VariantProps, cva } from "class-variance-authority"
 
 import { cn } from "../utils"
 
