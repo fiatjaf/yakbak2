@@ -2,14 +2,18 @@ import { batch, createEffect, createSignal, For, Match, onCleanup, Show, Switch 
 import { Globe, Loader, Telescope, User, Users } from "lucide-solid"
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer"
 import { NostrEvent } from "@nostr/tools/pure"
+import { Filter, matchFilter } from "@nostr/tools/filter"
 import { pool } from "@nostr/gadgets/global"
-import { loadFollowsList } from "@nostr/gadgets/lists"
+import { loadFollowsList, loadRelayList } from "@nostr/gadgets/lists"
 import { SubCloser } from "@nostr/tools/abstract-pool"
 
 import VoiceNote from "./VoiceNote"
 import user from "./user"
 import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group"
-import { DefinedTab, getRequestDeclaration, global, Tab } from "./nostr"
+import { DefinedTab, global, outbox, Tab } from "./nostr"
+import { outboxFilterRelayBatch } from "@nostr/gadgets/outbox"
+import { getSemaphore } from "@henrygd/semaphore"
+import { DuplicateEventError } from "@nostr/gadgets/store"
 
 const NOTES_PER_PAGE = 3
 const INITIAL_THRESHOLD = 7
@@ -21,8 +25,10 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
   const [isLoading, setLoading] = createSignal(false)
   // eslint-disable-next-line solid/reactivity
   const [visibleTabs, setVisibleTabs] = createSignal<[string, Tab][]>(props.forcedTabs ?? [global])
-  let allEvents: NostrEvent[] = []
-  let threshold = INITIAL_THRESHOLD
+
+  let pageManager: {
+    showMore: () => void
+  }
 
   let ref: HTMLDivElement | undefined
   let closer: SubCloser
@@ -38,42 +44,193 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
 
     ;(async () => {
       console.log("starting subscription", selected)
-      allEvents = []
-      threshold = INITIAL_THRESHOLD
       setLoading(true)
       setNotes([])
 
-      const requestMap = await getRequestDeclaration(selected[1], {
-        ...(selected[1].baseFilter || {}),
-        kinds: [1222],
-        limit: 400 // see note about this under "infinite scroll / pagination"
-      })
-      let eosed = false
-      let doneWaiting = setTimeout(flush, 2800)
-      closer = pool.subscribeMap(requestMap, {
-        label: `feed-${selected[0]}`,
-        onevent(event) {
-          if (event.tags.find(t => t[0] === "e")) return
-          allEvents.push(event)
-          if (eosed) {
-            allEvents.unshift(event)
-            setNotes(events => [event, ...events])
-            threshold++
+      switch (selected[1].type) {
+        case "relays": {
+          // relay feed
+          const relayPager = {
+            allEvents: [],
+            threshold: INITIAL_THRESHOLD,
+            showMore() {
+              this.threshold += NOTES_PER_PAGE
+              setNotes(this.allEvents.slice(0, this.threshold))
+            }
           }
-        },
-        oneose() {
-          clearTimeout(doneWaiting)
-          eosed = true
-          flush()
-        }
-      })
+          pageManager = relayPager
 
-      function flush() {
-        allEvents.sort((a, b) => b.created_at - a.created_at)
-        batch(() => {
-          setNotes(allEvents.slice(0, threshold))
-          setLoading(false)
-        })
+          const declaration: { url: string; filter: Filter }[] = []
+          for (let i = 0; i < selected[1].relays.length; i++) {
+            declaration.push({
+              url: selected[1].relays[i],
+              filter: {
+                kinds: [1222],
+
+                // hashtags and whatever else goes here
+                ...selected[1].baseFilter,
+
+                // see note about this under "infinite scroll / pagination"
+                limit: 400
+              }
+            })
+          }
+
+          let eosed = false
+          let doneWaiting = setTimeout(flush, 2800)
+          closer = pool.subscribeMap(declaration, {
+            label: `feed-${selected[0]}`,
+            onevent(event) {
+              if (event.tags.find(t => t[0] === "e")) return
+              relayPager.allEvents.push(event)
+              if (eosed) {
+                relayPager.allEvents.unshift(event)
+                setNotes(events => [event, ...events])
+                relayPager.threshold++
+              }
+            },
+            oneose() {
+              clearTimeout(doneWaiting)
+              eosed = true
+              flush()
+            }
+          })
+
+          function flush() {
+            relayPager.allEvents.sort((a, b) => b.created_at - a.created_at)
+            batch(() => {
+              setNotes(relayPager.allEvents.slice(0, relayPager.threshold))
+              setLoading(false)
+            })
+          }
+
+          break
+        }
+        case "users": {
+          // outbox feed
+          const outboxPager = {
+            allEvents: [],
+            threshold: INITIAL_THRESHOLD,
+            showMore() {
+              this.threshold += NOTES_PER_PAGE
+              setNotes(this.allEvents.slice(0, this.threshold))
+            }
+          }
+          pageManager = outboxPager
+
+          // from whom we're going to fetch
+          const authors = selected[1].pubkeys
+
+          // display what we have stored immediately
+          for await (let evt of outbox.store.queryEvents({ kinds: [1222], authors, limit: 100 })) {
+            outboxPager.allEvents.push(evt)
+          }
+
+          console.debug("stored events:", authors, outboxPager.allEvents)
+
+          flush()
+
+          // sync up each of the pubkeys to present
+          const now = Math.round(Date.now() / 1000)
+          for (let pubkey of authors) {
+            const sem = getSemaphore("outbox-sync", 15) // do it only 15 pubkeys at a time
+            await sem.acquire()
+
+            let bound = outbox.thresholds[pubkey]
+            let newest = bound ? bound[1] : undefined
+            let relays = (await loadRelayList(pubkey)).items
+              .filter(r => r.write)
+              .slice(0, 4)
+              .map(r => r.url)
+
+            const events = await pool.querySync(
+              relays,
+              { kinds: [1222, 1244], authors: [pubkey], since: newest },
+              { label: `catchup-${pubkey.substring(0, 6)}` }
+            )
+            console.log(
+              "catching up with",
+              pubkey,
+              { kinds: [1222, 1244], authors: [pubkey], since: newest },
+              events
+            )
+
+            for (let event of events) {
+              try {
+                await outbox.store.saveEvent(event)
+
+                // saved, now we now this was a new event, we can add it to our list of events to be displayed
+                if (matchFilter(selected[1].baseFilter, event)) {
+                  outboxPager.allEvents.push(event)
+                }
+              } catch (err) {
+                if (err instanceof DuplicateEventError) {
+                  console.warn("tried to save duplicate:", event)
+                } else {
+                  throw err
+                }
+              }
+            }
+
+            // update stored bound thresholds for this person since they're caught up to now
+            if (bound) {
+              bound[1] = now
+            } else if (events.length) {
+              // didn't have anything before, but now we have all of these
+              bound = [events[events.length - 1].created_at, now]
+            } else {
+              // no bound, no events
+              bound = [now - 1, now]
+            }
+            console.log("new bound for", pubkey, bound)
+            outbox.thresholds[pubkey] = bound
+
+            sem.release()
+          }
+
+          // now we've caught up with the current moment for everybody
+          outbox.saveThresholds()
+          console.log("all caught up")
+
+          flush()
+
+          // finally open this ongoing subscription
+          const declaration = await outboxFilterRelayBatch(authors, {
+            kinds: [1222, 1244],
+            since: now
+          })
+          closer = pool.subscribeMap(declaration, {
+            label: `feed-${selected[0]}`,
+            onevent(event) {
+              if (matchFilter(selected[1].baseFilter, event)) {
+                outboxPager.allEvents.unshift(event)
+                setNotes(events => [event, ...events])
+                outboxPager.threshold++
+              }
+
+              try {
+                outbox.store.saveEvent(event)
+                this.thresholds[event.pubkey][1] = Math.round(Date.now() / 1000)
+              } catch (err) {
+                if (err instanceof DuplicateEventError) {
+                  console.warn("tried to save duplicate from ongoing:", event)
+                } else {
+                  throw err
+                }
+              }
+            }
+          })
+
+          function flush() {
+            setNotes(
+              outboxPager.allEvents.slice(
+                0,
+                Math.min(outboxPager.allEvents.length, outboxPager.threshold)
+              )
+            )
+            setLoading(outboxPager.allEvents.length > 0)
+          }
+        }
       }
     })()
   })
@@ -86,8 +243,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
       // (requires opening more subscriptions, fetching replies etc)
       // TODO: store things locally instead of having to download a ton of events on first load
       console.log("infinite scroll next page threshold")
-      threshold += NOTES_PER_PAGE
-      setNotes(allEvents.slice(0, threshold))
+      pageManager.showMore()
     }
   })
 

@@ -1,4 +1,4 @@
-import { outboxFilterRelayBatch } from "@nostr/gadgets/outbox"
+import { IDBEventStore } from "@nostr/gadgets/store"
 import { Filter } from "@nostr/tools/filter"
 
 export type Tab = {
@@ -21,28 +21,18 @@ export const global: DefinedTab = [
   }
 ]
 
-/**
- * Returns a map of {relayUrl: [filter]} to be passed to pool.subscribeMap() according to the
- * currently selected group.
- */
-export async function getRequestDeclaration(
-  tab: Tab,
-  baseFilter: Filter
-): Promise<{ url: string; filter: Filter }[]> {
-  const declaration: { url: string; filter: Filter }[] = []
+export class OutboxDB {
+  store: IDBEventStore
+  thresholds: { [pubkey: string]: [oldest: number, newest: number] }
 
-  switch (tab.type) {
-    case "relays": {
-      for (let i = 0; i < tab.relays.length; i++) {
-        declaration.push({
-          url: tab.relays[i],
-          filter: baseFilter
-        })
-      }
-      return declaration
-    }
-    case "users": {
-      return outboxFilterRelayBatch(tab.pubkeys, baseFilter)
-    }
+  constructor() {
+    this.store = new IDBEventStore()
+    this.thresholds = JSON.parse(localStorage.getItem("thresholds"))
+  }
+
+  saveThresholds() {
+    localStorage.setItem("thresholds", JSON.stringify(this.thresholds))
   }
 }
+
+export const outbox = new OutboxDB()
