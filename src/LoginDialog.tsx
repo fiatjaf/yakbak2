@@ -150,6 +150,7 @@ function LoginDialog(props: {
       addLogin(bunkerUri())
       props.onLogin()
       props.onClose()
+      setBunkerUri("")
     } catch (error) {
       console.error("Bunker login failed:", error)
     } finally {
@@ -165,6 +166,7 @@ function LoginDialog(props: {
       addLogin(nsec())
       props.onLogin()
       props.onClose()
+      setNsec("")
     } catch (error) {
       console.error("Nsec login failed:", error)
     } finally {
