@@ -75,7 +75,6 @@ function LoginDialog(props: {
                     placeholder="nsec1..."
                   />
                 </div>
-
                 <Button
                   class="w-full rounded-full py-6 mt-4"
                   onClick={handleKeyLogin}

@@ -9,7 +9,7 @@ const Input = (props: ComponentProps<"input">) => {
       props.class
     )
 
-  return <input ref={props.ref} class={cls()} {...props} />
+  return <input ref={props.ref} {...props} class={cls()} />
 }
 
 export { Input }
