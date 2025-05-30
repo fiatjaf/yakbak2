@@ -55,7 +55,7 @@ function Profile() {
         <div class="container mx-auto px-4 py-8 max-w-2xl">
           <Card class="p-6 mb-8">
             <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between">
-              <div class="flex items-start space-x-4">
+              <div class="flex items-start w-full space-x-4">
                 <Avatar class="h-20 w-20">
                   <AvatarImage src={author().image} alt="Avatar" />
                   <AvatarFallback>{author().npub.slice(-2)}</AvatarFallback>
@@ -155,6 +155,7 @@ function Profile() {
         await Promise.any(pool.publish(outbox, await user().current.signer.signEvent(update)))
         toast.success(successMessage)
         setIsFollowing(newState)
+        await loadFollowsList(user().current.pubkey, [], true)
       }
     } catch (err) {
       console.error("Failed to update follow list:", err)

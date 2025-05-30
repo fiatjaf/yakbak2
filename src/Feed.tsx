@@ -25,6 +25,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
   const [isLoading, setLoading] = createSignal(false)
   // eslint-disable-next-line solid/reactivity
   const [visibleTabs, setVisibleTabs] = createSignal<[string, Tab][]>(props.forcedTabs ?? [global])
+  const [paginable, setPaginable] = createSignal(false)
 
   let pageManager: {
     showMore: () => void
@@ -54,8 +55,14 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
             allEvents: [],
             threshold: INITIAL_THRESHOLD,
             showMore() {
-              this.threshold += NOTES_PER_PAGE
-              setNotes(this.allEvents.slice(0, this.threshold))
+              const hasNew = this.allEvents.length > this.threshold
+              if (hasNew) {
+                this.threshold += NOTES_PER_PAGE
+                setNotes(this.allEvents.slice(0, this.threshold))
+              } else {
+                setPaginable(false)
+                // TODO: load more from relays somehow
+              }
             }
           }
           pageManager = relayPager
@@ -101,6 +108,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
             batch(() => {
               setNotes(relayPager.allEvents.slice(0, relayPager.threshold))
               setLoading(false)
+              setPaginable(true)
             })
           }
 
@@ -112,8 +120,14 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
             allEvents: [],
             threshold: INITIAL_THRESHOLD,
             showMore() {
-              this.threshold += NOTES_PER_PAGE
-              setNotes(this.allEvents.slice(0, this.threshold))
+              const hasNew = this.allEvents.length > this.threshold
+              if (hasNew) {
+                this.threshold += NOTES_PER_PAGE
+                setNotes(this.allEvents.slice(0, this.threshold))
+              } else {
+                setPaginable(false)
+                // TODO: load more older stuff?
+              }
             }
           }
           pageManager = outboxPager
@@ -151,6 +165,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
             console.log(
               "catching up with",
               pubkey,
+              relays,
               { kinds: [1222, 1244], authors: [pubkey], since: newest },
               events
             )
@@ -160,7 +175,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                 await outbox.store.saveEvent(event)
 
                 // saved, now we now this was a new event, we can add it to our list of events to be displayed
-                if (matchFilter(selected[1].baseFilter, event)) {
+                if (!selected[1].baseFilter || matchFilter(selected[1].baseFilter, event)) {
                   outboxPager.allEvents.push(event)
                 }
               } catch (err) {
@@ -191,6 +206,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           // now we've caught up with the current moment for everybody
           outbox.saveThresholds()
           console.log("all caught up")
+          setPaginable(true)
 
           flush()
 
@@ -201,15 +217,16 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           })
           closer = pool.subscribeMap(declaration, {
             label: `feed-${selected[0]}`,
-            onevent(event) {
-              if (matchFilter(selected[1].baseFilter, event)) {
+            async onevent(event) {
+              if (!selected[1].baseFilter || matchFilter(selected[1].baseFilter, event)) {
                 outboxPager.allEvents.unshift(event)
                 setNotes(events => [event, ...events])
                 outboxPager.threshold++
               }
 
               try {
-                outbox.store.saveEvent(event)
+                await outbox.store.saveEvent(event)
+
                 this.thresholds[event.pubkey][1] = Math.round(Date.now() / 1000)
               } catch (err) {
                 if (err instanceof DuplicateEventError) {
@@ -222,13 +239,15 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           })
 
           function flush() {
-            setNotes(
-              outboxPager.allEvents.slice(
-                0,
-                Math.min(outboxPager.allEvents.length, outboxPager.threshold)
+            batch(() => {
+              setNotes(
+                outboxPager.allEvents.slice(
+                  0,
+                  Math.min(outboxPager.allEvents.length, outboxPager.threshold)
+                )
               )
-            )
-            setLoading(outboxPager.allEvents.length > 0)
+              setLoading(outboxPager.allEvents.length === 0)
+            })
           }
         }
       }
@@ -237,7 +256,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
 
   // infinite scroll / pagination
   createEffect(() => {
-    if (visible()) {
+    if (paginable() && visible()) {
       // our infinite scroll is just allowing more events to be rendered
       // we already have these events in memory, but we don't render them all at once because it's wasteful
       // (requires opening more subscriptions, fetching replies etc)
@@ -260,14 +279,20 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
     })
   })
 
+  createEffect(() => {
+    let vts = visibleTabs()
+    let previouslySelected = sessionStorage.getItem("selected-tab")
+    let vt = vts.find(vt => vt[0] === previouslySelected)
+    if (vt) {
+      setTab(vt)
+    }
+  })
+
   return (
     <div class="space-y-4">
       <Show when={!props.invisibleToggles}>
         <div class="flex justify-center -mt-6 mb-2">
-          <ToggleGroup
-            value={tab()[0]}
-            onChange={(value: string) => value && setTab(visibleTabs().find(vt => vt[0] === value))}
-          >
+          <ToggleGroup value={tab()[0]} onChange={handleSelectTab}>
             <For each={visibleTabs()}>
               {dt => (
                 <ToggleGroupItem value={dt[0]} aria-label={dt[0]}>
@@ -331,6 +356,16 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
       */}
     </div>
   )
+
+  function handleSelectTab(value: string) {
+    if (value) {
+      let vt = visibleTabs().find(vt => vt[0] === value)
+      if (vt) {
+        setTab(vt)
+        sessionStorage.setItem("selected-tab", value)
+      }
+    }
+  }
 }
 
 export default Feed

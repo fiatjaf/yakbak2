@@ -27,7 +27,7 @@ export class OutboxDB {
 
   constructor() {
     this.store = new IDBEventStore()
-    this.thresholds = JSON.parse(localStorage.getItem("thresholds"))
+    this.thresholds = JSON.parse(localStorage.getItem("thresholds") || "{}")
   }
 
   saveThresholds() {

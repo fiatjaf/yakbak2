@@ -64,7 +64,7 @@ function VoiceNotePage() {
     }
 
     // now try the same relays this note was found in
-    const sameRelayMinusHintAndOutbox = Array.from(pool.seenOn.get(event.id))
+    const sameRelayMinusHintAndOutbox = Array.from(pool.seenOn.get(event.id) || [])
       .map(r => r.url)
       .filter(url => url !== hint && authorOutboxMinusHint.indexOf(url) === -1)
     const res = await pool.querySync(

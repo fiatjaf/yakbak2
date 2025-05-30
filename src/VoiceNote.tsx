@@ -45,10 +45,10 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
     neventEncode({
       id: props.event.id,
       author: props.event.pubkey,
-      relays: Array.from(pool.seenOn.get(props.event.id)).map(r => r.url)
+      relays: Array.from(pool.seenOn.get(props.event.id) || []).map(r => r.url)
     })
   const relays = () =>
-    Array.from(pool.seenOn.get(props.event.id))
+    Array.from(pool.seenOn.get(props.event.id) || [])
       .slice(0, 3)
       .map(r => r.url)
       .map(url => (url.startsWith("wss://") ? url.substring(6) : url))
