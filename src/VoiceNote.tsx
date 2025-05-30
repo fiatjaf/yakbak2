@@ -298,7 +298,7 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
                   </Show>
                 </Show>
               </div>
-              <div class="flex flex items-center gap-2">
+              <div class="flex items-center gap-2 overflow-hidden">
                 <div class="hidden sm:flex items-center gap-2">
                   <For each={relays()}>
                     {url => (
