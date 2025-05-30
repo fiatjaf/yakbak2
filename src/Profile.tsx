@@ -113,7 +113,11 @@ function Profile() {
   )
 
   async function handleFollowUnfollow() {
-    const follows = await loadFollowsList(user().current.pubkey, [], true)
+    const follows = await loadFollowsList(
+      user().current.pubkey,
+      ["wss://purplepag.es", "wss://relay.nostr.band", "wss://relay.damus.io"],
+      true
+    )
     if (!follows.event) {
       toast.error("Couldn't find your follow list")
       return
@@ -152,10 +156,12 @@ function Profile() {
           .filter(r => r.write)
           .slice(0, 4)
           .map(r => r.url)
-        await Promise.any(pool.publish(outbox, await user().current.signer.signEvent(update)))
+
+        const newEvent = await user().current.signer.signEvent(update)
+        await Promise.any(pool.publish(outbox, newEvent))
         toast.success(successMessage)
         setIsFollowing(newState)
-        await loadFollowsList(user().current.pubkey, [], true)
+        await loadFollowsList(user().current.pubkey, [], newEvent)
       }
     } catch (err) {
       console.error("Failed to update follow list:", err)
