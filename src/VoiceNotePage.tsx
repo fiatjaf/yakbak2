@@ -138,16 +138,17 @@ function VoiceNotePage() {
           onevent(event) {
             if (eosed) {
               const parentId = event.tags.find(t => t[0] === "e")[1]
-              if (parentId && parentId !== root_.id) {
-                if (!(parentId in thread)) {
-                  console.warn("couldn't find the parent for", event, "in the thread")
-                  return
-                }
+              if (parentId in thread) {
                 batch(() => {
                   const subt = { event, children: [] }
                   setThread(parentId, "children", thread[parentId].children.length, subt)
                   setThread(event.id, subt)
                 })
+              } else if (parentId === root_.id) {
+                setThread(event.id, { event, children: [] })
+              } else {
+                console.warn("couldn't find the parent for", event, "in the thread")
+                return
               }
             } else {
               waiting.push(event)

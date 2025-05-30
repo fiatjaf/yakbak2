@@ -107,7 +107,7 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
         "#e": [props.event.id]
       },
       {
-        label: "reactions",
+        label: "replies/reactions/zaps",
         onevent(event) {
           switch (event.kind) {
             case 9735:
@@ -133,7 +133,6 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
               setReplyCount(curr => curr + 1)
               if (user().current && event.pubkey === user().current.pubkey) {
                 setHasReplied(true)
-                break
               }
               break
           }
