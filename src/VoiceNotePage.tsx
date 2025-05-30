@@ -9,6 +9,7 @@ import { loadRelayList } from "@nostr/gadgets/lists"
 import { SubCloser } from "@nostr/tools/abstract-pool"
 
 import VoiceNote from "./VoiceNote"
+import { outbox } from "./nostr"
 
 type SubThread = {
   event: NostrEvent
@@ -22,15 +23,23 @@ function VoiceNotePage() {
     () => params.nevent,
     async nevent => {
       const ptr = decode(nevent).data as EventPointer
+
+      // try on local database
+      let res = await outbox.store.getByIds([ptr.id])
+      if (res.length) return res[0]
+
+      // try on relays from hint
       if (ptr.relays) {
         let res = await pool.querySync(ptr.relays, { ids: [ptr.id] }, { label: "note-1st" })
         if (res.length) return res[0]
       }
+
+      // try on outbox relays if there is an author hint
       let outboxMinusHint = (await loadRelayList(ptr.author)).items
         .filter(r => r.write && ptr.relays.indexOf(r.url) === -1)
         .slice(0, 4)
         .map(r => r.url)
-      const res = await pool.querySync(outboxMinusHint, { ids: [ptr.id] }, { label: "note-2nd" })
+      res = await pool.querySync(outboxMinusHint, { ids: [ptr.id] }, { label: "note-2nd" })
       if (res.length === 0) throw new Error(`couldn't find event ${ptr.id}`)
       return res[0]
     }
@@ -41,6 +50,10 @@ function VoiceNotePage() {
     if (!tag) return event
 
     const id = tag[1]
+    // try on local database
+    let res = await outbox.store.getByIds([id])
+    if (res.length) return res[0]
+
     const hint = tag[2]
     if (hint) {
       let res = await pool.querySync([hint], { ids: [id] }, { label: "parent-1st" })
@@ -55,6 +68,8 @@ function VoiceNotePage() {
         .filter(r => r.write && r.url !== hint)
         .slice(0, 4)
         .map(r => r.url)
+
+      // try on outbox relays
       const res = await pool.querySync(
         authorOutboxMinusHint,
         { ids: [id] },
@@ -67,11 +82,7 @@ function VoiceNotePage() {
     const sameRelayMinusHintAndOutbox = Array.from(pool.seenOn.get(event.id) || [])
       .map(r => r.url)
       .filter(url => url !== hint && authorOutboxMinusHint.indexOf(url) === -1)
-    const res = await pool.querySync(
-      sameRelayMinusHintAndOutbox,
-      { ids: [id] },
-      { label: "parent-3nd" }
-    )
+    res = await pool.querySync(sameRelayMinusHintAndOutbox, { ids: [id] }, { label: "parent-3nd" })
     if (res.length) return res[0]
 
     // fallback to treating this as the root if none other is found
@@ -85,6 +96,18 @@ function VoiceNotePage() {
     const root_ = root()
     if (!root_) return
     ;(async () => {
+      let waiting: NostrEvent[] = []
+
+      // fetch from our database
+      for await (let event of outbox.store.queryEvents({
+        kinds: [1244],
+        "#E": [root_.id],
+        limit: 30
+      })) {
+        waiting.push(event)
+      }
+
+      // fetch from relays
       let inbox = (await loadRelayList(root_.pubkey)).items
         .filter(r => r.read)
         .slice(0, 4)
@@ -100,7 +123,6 @@ function VoiceNotePage() {
       }
 
       let eosed = false
-      let waiting: NostrEvent[] = []
 
       if (closer) closer.close()
 

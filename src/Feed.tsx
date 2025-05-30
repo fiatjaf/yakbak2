@@ -126,13 +126,16 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                 setNotes(this.allEvents.slice(0, this.threshold))
               } else {
                 setPaginable(false)
-                maybeFetchBackwardsUntil(this.allEvents[this.allEvents.length - 1].created_at).then(
-                  () => {
+
+                if (this.allEvents.length) {
+                  maybeFetchBackwardsUntil(
+                    this.allEvents[this.allEvents.length - 1].created_at
+                  ).then(() => {
                     this.threshold += NOTES_PER_PAGE
                     setNotes(this.allEvents.slice(0, this.threshold))
                     setPaginable(true)
-                  }
-                )
+                  })
+                }
               }
             }
           }
@@ -147,7 +150,6 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           }
 
           console.debug("stored events:", authors, outboxPager.allEvents)
-
           flush()
 
           // sync up each of the pubkeys to present
