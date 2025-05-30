@@ -104,14 +104,16 @@ function Create(props: {
           <Button
             onClick={handleDiscardRecording}
             size="lg"
-            class={`h-12 w-12 rounded-[50%] shadow-lg flex items-center justify-center p-0`}
+            variant="outline"
+            class={`h-12 w-12 rounded-[50%] shadow-lg flex items-center justify-center p-0 border-2`}
           >
             <Trash2 class="h-5 w-5" />
           </Button>
           <Button
             onClick={handlePlayPause}
             size="lg"
-            class={`h-16 w-16 rounded-[50%] shadow-lg transition-transform duration-200 flex items-center justify-center p-0`}
+            variant="outline"
+            class={`h-16 w-16 rounded-[50%] shadow-lg transition-transform duration-200 flex items-center justify-center p-0 border-2`}
           >
             <Switch>
               <Match when={previewUrl()}>
@@ -132,7 +134,8 @@ function Create(props: {
           <Button
             onClick={handlePublishRecording}
             size="lg"
-            class={`h-12 w-12 rounded-[50%] shadow-lg flex items-center justify-center p-0`}
+            variant="outline"
+            class={`h-12 w-12 rounded-[50%] shadow-lg flex items-center justify-center p-0 border-2`}
           >
             <ArrowUpToLine />
           </Button>
@@ -236,8 +239,8 @@ function Create(props: {
           <Button
             onClick={handleRecord}
             size={props.replyingTo ? "sm" : "lg"}
-            variant={props.replyingTo ? "ghost" : undefined}
-            class={`${props.replyingTo ? "h-9 bg-transparent text-black hover:bg-accent shadow-none rounded-md" : "h-16 w-16 shadow-lg rounded-[50%]"} transition-transform duration-200`}
+            variant={props.replyingTo ? "ghost" : "default"}
+            class={`${props.replyingTo ? "h-9 bg-transparent shadow-none rounded-md" : "h-16 w-16 shadow-lg rounded-[50%]"} transition-transform duration-200`}
             title={props.replyingTo ? "Replies" : undefined}
           >
             <Switch>

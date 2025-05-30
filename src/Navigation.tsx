@@ -1,6 +1,7 @@
 import { Component } from "solid-js"
 import { A } from "@solidjs/router"
 import LoginArea from "./LoginArea"
+import ThemeToggle from "./components/ThemeToggle"
 
 function Navigation() {
   return (
@@ -12,6 +13,7 @@ function Navigation() {
         </A>
 
         <div class="flex items-center gap-4">
+          <ThemeToggle />
           <LoginArea />
         </div>
       </div>

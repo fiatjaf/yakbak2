@@ -3,6 +3,7 @@ import { Route, Router } from "@solidjs/router"
 import { pool } from "@nostr/gadgets/global"
 
 import { Toaster } from "./components/ui/sonner"
+import { ThemeProvider } from "./theme"
 
 import Home from "./Home"
 import Navigation from "./Navigation"
@@ -16,7 +17,7 @@ pool.trackRelays = true
 
 function App() {
   return (
-    <>
+    <ThemeProvider>
       <Toaster />
       <Router
         root={props => (
@@ -33,7 +34,7 @@ function App() {
         <Route path="/r/:host" component={RelayPage} />
         <Route path="/settings" component={Settings} />
       </Router>
-    </>
+    </ThemeProvider>
   )
 }
 

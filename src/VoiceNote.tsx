@@ -239,13 +239,11 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
             <div class="mt-2">
               <audio
                 controls
-                class="w-full"
+                class="w-full bg-[#f1f3f4] dark:invert rounded-lg"
                 ref={audioRef}
                 src={props.event.content}
                 preload="metadata"
-              >
-                Your browser does not support the audio element.
-              </audio>
+              />
             </div>
 
             {/* hashtags */}
