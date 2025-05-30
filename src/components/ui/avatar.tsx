@@ -28,7 +28,12 @@ const AvatarImage = <T extends ValidComponent = "img">(
   props: PolymorphicProps<T, AvatarImageProps<T>>
 ) => {
   const [local, others] = splitProps(props as AvatarImageProps, ["class"])
-  return <ImagePrimitive.Img class={cn("aspect-square size-full", local.class)} {...others} />
+  return (
+    <ImagePrimitive.Img
+      class={cn("aspect-square size-full object-cover", local.class)}
+      {...others}
+    />
+  )
 }
 
 type AvatarFallbackProps<T extends ValidComponent = "span"> =
