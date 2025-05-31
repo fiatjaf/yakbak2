@@ -42,7 +42,9 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
   createEffect(() => {
     if (closer) closer.close()
     const selected = tab()
+    setPaginable(false)
 
+    // ~
     ;(async () => {
       console.log("starting subscription", selected)
       setLoading(true)
@@ -150,12 +152,54 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           }
 
           console.debug("stored events:", authors, outboxPager.allEvents)
-          flush()
+          if (outboxPager.allEvents.length !== 0) {
+            flush()
+          } else {
+            // if there is nothing in the database we do a preliminary query
+            // just to show something before we start the "sync" process below
+            console.debug("doing preliminary fetch before the full sync process")
+            await new Promise(async resolve => {
+              let preliminaryEvents: NostrEvent[] = []
+              let preliminarySub = pool.subscribeMap(
+                await outboxFilterRelayBatch(authors, {
+                  kinds: [1222],
+                  limit: 10,
+                  ...selected[1].baseFilter
+                }),
+                {
+                  label: `preliminary-${selected[0]}`,
+                  async onevent(event) {
+                    preliminaryEvents.push(event)
+
+                    try {
+                      await outbox.store.saveEvent(event)
+                    } catch (err) {
+                      if (err instanceof DuplicateEventError) {
+                        console.warn("tried to save duplicate from ongoing:", event)
+                      } else {
+                        throw err
+                      }
+                    }
+                  },
+                  oneose() {
+                    preliminarySub.close()
+                    preliminaryEvents.sort((a, b) => b.created_at - a.created_at)
+                    batch(() => {
+                      setNotes(preliminaryEvents)
+                      setLoading(false)
+                    })
+                  },
+                  onclose: resolve
+                }
+              )
+            })
+          }
 
           // sync up each of the pubkeys to present
           let addedNewEventsOnSync = false
           const now = Math.round(Date.now() / 1000)
-          for (let pubkey of authors) {
+          for (let i = 0; i < authors.length; i++) {
+            let pubkey = authors[i]
             const sem = getSemaphore("outbox-sync", 15) // do it only 15 pubkeys at a time
             await sem.acquire().then(async () => {
               let bound = outbox.thresholds[pubkey]
@@ -165,16 +209,23 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                 .slice(0, 4)
                 .map(r => r.url)
 
-              const events = await pool.querySync(
-                relays,
-                { kinds: [1222, 1244], authors: [pubkey], since: newest, limit: 200 },
-                { label: `catchup-${pubkey.substring(0, 6)}` }
-              )
+              let events: NostrEvent[]
+              try {
+                events = await pool.querySync(
+                  relays,
+                  { kinds: [1222, 1244], authors: [pubkey], since: newest, limit: 200 },
+                  { label: `catchup-${pubkey.substring(0, 6)}`}
+                )
+              } catch (err) {
+                console.warn("failed to query events for", pubkey, err)
+              }
+
               console.log(
-                "catching up with",
+                `${i + 1}/${authors.length} catching up with`,
                 pubkey,
                 relays,
                 { kinds: [1222, 1244], authors: [pubkey], since: newest },
+                `got ${events.length} events`,
                 events
               )
 
@@ -353,7 +404,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
       // our infinite scroll is just allowing more events to be rendered
       // we already have these events in memory, but we don't render them all at once because it's wasteful
       // (requires opening more subscriptions, fetching replies etc)
-      console.log("infinite scroll next page threshold")
+      console.log("infinite scroll next page threshold", paginable())
       pageManager.showMore()
     }
   })
