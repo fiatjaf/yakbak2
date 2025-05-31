@@ -196,16 +196,24 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           }
 
           // sync up each of the pubkeys to present
+          console.log("starting catch up sync")
           let addedNewEventsOnSync = false
           const now = Math.round(Date.now() / 1000)
           const promises: Promise<void>[] = []
           for (let i = 0; i < authors.length; i++) {
             let pubkey = authors[i]
+            let bound = outbox.thresholds[pubkey]
+            let newest = bound ? bound[1] : undefined
+
+            if (newest > now - 60 * 60 * 2) {
+              // if this person was caught up to 2 hours ago there is no need to repeat this
+              // (we'll make up for these missing events in the ongoing live subscription)
+              continue
+            }
+
             const sem = getSemaphore("outbox-sync", 15) // do it only 15 pubkeys at a time
             promises.push(
               sem.acquire().then(async () => {
-                let bound = outbox.thresholds[pubkey]
-                let newest = bound ? bound[1] : undefined
                 let relays = (await loadRelayList(pubkey)).items
                   .filter(r => r.write)
                   .slice(0, 4)
@@ -226,7 +234,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                   events = []
                 }
 
-                console.log(
+                console.debug(
                   `${i + 1}/${authors.length} catching up with`,
                   pubkey,
                   relays,
@@ -264,7 +272,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                   // no bound, no events
                   bound = [now - 1, now]
                 }
-                console.log("new bound for", pubkey, bound)
+                console.debug("new bound for", pubkey, bound)
                 outbox.thresholds[pubkey] = bound
 
                 sem.release()
@@ -276,7 +284,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
 
           // now we've caught up with the current moment for everybody
           outbox.saveThresholds()
-          console.log("all caught up")
+          console.debug("all caught up")
           setPaginable(true)
 
           if (addedNewEventsOnSync) {
@@ -287,7 +295,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           // finally open this ongoing subscription
           const declaration = await outboxFilterRelayBatch(authors, {
             kinds: [1222, 1244],
-            since: now
+            since: now - 60 * 60 * 2
           })
           closer = pool.subscribeMap(declaration, {
             label: `feed-${selected[0]}`,
@@ -356,7 +364,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                   { kinds: [1222, 1244], authors: [pubkey], until: oldest, limit: 200 },
                   { label: `page-${pubkey.substring(0, 6)}` }
                 )
-                console.log(
+                console.debug(
                   "paginating to the past",
                   pubkey,
                   relays,
@@ -381,7 +389,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                   // didn't have anything before, but now we have all of these
                   bound[0] = events[events.length - 1].created_at
                 }
-                console.log("updated bound for", pubkey, bound)
+                console.debug("updated bound for", pubkey, bound)
                 outbox.thresholds[pubkey] = bound
 
                 sem.release()
@@ -389,7 +397,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
             }
 
             outbox.saveThresholds()
-            console.log("paginated back")
+            console.debug("paginated back")
 
             // after having downloaded more stuff from everybody we needed we can grab stuff from our database
             // and put it in memory
@@ -413,7 +421,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
       // our infinite scroll is just allowing more events to be rendered
       // we already have these events in memory, but we don't render them all at once because it's wasteful
       // (requires opening more subscriptions, fetching replies etc)
-      console.log("infinite scroll next page threshold", paginable())
+      console.debug("infinite scroll next page threshold", paginable())
       pageManager.showMore()
     }
   })
