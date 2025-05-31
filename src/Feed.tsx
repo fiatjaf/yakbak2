@@ -33,14 +33,22 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
 
   let ref: HTMLDivElement | undefined
   let closer: SubCloser
+  let abort = new AbortController()
   const visible = createVisibilityObserver({ threshold: 1 })(() => ref)
 
   onCleanup(() => {
     if (closer) closer.close()
+    abort.abort("<Feed /> component cleanup")
   })
 
   createEffect(() => {
     if (closer) closer.close()
+    abort.abort("<Feed /> tab changed")
+    abort = new AbortController()
+    const signal = abort.signal
+
+    signal.onabort = v => console.debug("aborted!", v)
+
     const selected = tab()
     setPaginable(false)
 
@@ -133,6 +141,8 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                   maybeFetchBackwardsUntil(
                     this.allEvents[this.allEvents.length - 1].created_at
                   ).then(() => {
+                    if (signal.aborted) return
+
                     this.threshold += NOTES_PER_PAGE
                     setNotes(this.allEvents.slice(0, this.threshold))
                     setPaginable(true)
@@ -148,9 +158,11 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
 
           // display what we have stored immediately
           for await (let evt of outbox.store.queryEvents({ kinds: [1222], authors, limit: 100 })) {
+            if (signal.aborted) return
             outboxPager.allEvents.push(evt)
           }
 
+          if (signal.aborted) return
           console.debug("stored events:", authors, outboxPager.allEvents)
           if (outboxPager.allEvents.length !== 0) {
             flush()
@@ -183,6 +195,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                   },
                   oneose() {
                     preliminarySub.close()
+                    if (signal.aborted) return
                     preliminaryEvents.sort((a, b) => b.created_at - a.created_at)
                     batch(() => {
                       setNotes(preliminaryEvents)
@@ -208,16 +221,27 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
             if (newest > now - 60 * 60 * 2) {
               // if this person was caught up to 2 hours ago there is no need to repeat this
               // (we'll make up for these missing events in the ongoing live subscription)
+              console.log(`${i + 1}/${authors.length} skip`, newest, ">", now - 60 * 60 * 2)
               continue
             }
 
             const sem = getSemaphore("outbox-sync", 15) // do it only 15 pubkeys at a time
             promises.push(
               sem.acquire().then(async () => {
+                if (signal.aborted) {
+                  sem.release()
+                  return
+                }
+
                 let relays = (await loadRelayList(pubkey)).items
                   .filter(r => r.write)
                   .slice(0, 4)
                   .map(r => r.url)
+
+                if (signal.aborted) {
+                  sem.release()
+                  return
+                }
 
                 let events: NostrEvent[]
                 try {
@@ -232,6 +256,11 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                 } catch (err) {
                   console.warn("failed to query events for", pubkey, "at", relays)
                   events = []
+                }
+
+                if (signal.aborted) {
+                  sem.release()
+                  return
                 }
 
                 console.debug(
@@ -284,7 +313,9 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
 
           // now we've caught up with the current moment for everybody
           outbox.saveThresholds()
-          console.debug("all caught up")
+          if (signal.aborted) return
+
+          console.debug(`all caught up`)
           setPaginable(true)
 
           if (addedNewEventsOnSync) {
@@ -337,6 +368,11 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
             for (let pubkey of authors) {
               const sem = getSemaphore("outbox-sync", 15) // do it only 15 pubkeys at a time
               await sem.acquire().then(async () => {
+                if (signal.aborted) {
+                  sem.release()
+                  return
+                }
+
                 let bound = outbox.thresholds[pubkey]
                 if (!bound) {
                   // this should never happen because we set the bounds for everybody
@@ -359,11 +395,17 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                   .slice(0, 4)
                   .map(r => r.url)
 
+                if (signal.aborted) {
+                  sem.release()
+                  return
+                }
+
                 const events = await pool.querySync(
                   relays,
                   { kinds: [1222, 1244], authors: [pubkey], until: oldest, limit: 200 },
                   { label: `page-${pubkey.substring(0, 6)}` }
                 )
+
                 console.debug(
                   "paginating to the past",
                   pubkey,
