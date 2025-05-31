@@ -136,7 +136,7 @@ function LoginDialog(props: {
       props.onLogin()
       props.onClose()
     } catch (error) {
-      console.error("Bunker login failed:", error)
+      console.error("extension login failed:", error)
     } finally {
       setIsLoading(false)
     }
@@ -152,7 +152,7 @@ function LoginDialog(props: {
       props.onClose()
       setBunkerUri("")
     } catch (error) {
-      console.error("Bunker login failed:", error)
+      console.error("bunker login failed:", error)
     } finally {
       setIsLoading(false)
     }
@@ -168,7 +168,7 @@ function LoginDialog(props: {
       props.onClose()
       setNsec("")
     } catch (error) {
-      console.error("Nsec login failed:", error)
+      console.error("nsec login failed:", error)
     } finally {
       setIsLoading(false)
     }

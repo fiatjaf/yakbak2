@@ -198,72 +198,81 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           // sync up each of the pubkeys to present
           let addedNewEventsOnSync = false
           const now = Math.round(Date.now() / 1000)
+          const promises: Promise<void>[] = []
           for (let i = 0; i < authors.length; i++) {
             let pubkey = authors[i]
             const sem = getSemaphore("outbox-sync", 15) // do it only 15 pubkeys at a time
-            await sem.acquire().then(async () => {
-              let bound = outbox.thresholds[pubkey]
-              let newest = bound ? bound[1] : undefined
-              let relays = (await loadRelayList(pubkey)).items
-                .filter(r => r.write)
-                .slice(0, 4)
-                .map(r => r.url)
+            promises.push(
+              sem.acquire().then(async () => {
+                let bound = outbox.thresholds[pubkey]
+                let newest = bound ? bound[1] : undefined
+                let relays = (await loadRelayList(pubkey)).items
+                  .filter(r => r.write)
+                  .slice(0, 4)
+                  .map(r => r.url)
 
-              let events: NostrEvent[]
-              try {
-                events = await pool.querySync(
-                  relays,
-                  { kinds: [1222, 1244], authors: [pubkey], since: newest, limit: 200 },
-                  { label: `catchup-${pubkey.substring(0, 6)}`}
-                )
-              } catch (err) {
-                console.warn("failed to query events for", pubkey, err)
-              }
-
-              console.log(
-                `${i + 1}/${authors.length} catching up with`,
-                pubkey,
-                relays,
-                { kinds: [1222, 1244], authors: [pubkey], since: newest },
-                `got ${events.length} events`,
-                events
-              )
-
-              for (let event of events) {
+                let events: NostrEvent[]
                 try {
-                  await outbox.store.saveEvent(event)
-
-                  // saved, now we know this was a new event, we can add it to our list of events to be displayed
-                  if (!selected[1].baseFilter || matchFilter(selected[1].baseFilter, event)) {
-                    outboxPager.allEvents.push(event)
-                    outboxPager.threshold++
-                    addedNewEventsOnSync = true
-                  }
+                  events = await Promise.race([
+                    pool.querySync(
+                      relays,
+                      { kinds: [1222, 1244], authors: [pubkey], since: newest, limit: 200 },
+                      { label: `catchup-${pubkey.substring(0, 6)}` }
+                    ),
+                    new Promise<NostrEvent[]>((_, rej) => setTimeout(rej, 5000))
+                  ])
                 } catch (err) {
-                  if (err instanceof DuplicateEventError) {
-                    console.warn("tried to save duplicate:", event)
-                  } else {
-                    throw err
+                  console.warn("failed to query events for", pubkey, "at", relays)
+                  events = []
+                }
+
+                console.log(
+                  `${i + 1}/${authors.length} catching up with`,
+                  pubkey,
+                  relays,
+                  { kinds: [1222, 1244], authors: [pubkey], since: newest },
+                  `got ${events.length} events`,
+                  events
+                )
+
+                for (let event of events) {
+                  try {
+                    await outbox.store.saveEvent(event)
+
+                    // saved, now we know this was a new event, we can add it to our list of events to be displayed
+                    if (!selected[1].baseFilter || matchFilter(selected[1].baseFilter, event)) {
+                      outboxPager.allEvents.push(event)
+                      outboxPager.threshold++
+                      addedNewEventsOnSync = true
+                    }
+                  } catch (err) {
+                    if (err instanceof DuplicateEventError) {
+                      console.warn("tried to save duplicate:", event)
+                    } else {
+                      throw err
+                    }
                   }
                 }
-              }
 
-              // update stored bound thresholds for this person since they're caught up to now
-              if (bound) {
-                bound[1] = now
-              } else if (events.length) {
-                // didn't have anything before, but now we have all of these
-                bound = [events[events.length - 1].created_at, now]
-              } else {
-                // no bound, no events
-                bound = [now - 1, now]
-              }
-              console.log("new bound for", pubkey, bound)
-              outbox.thresholds[pubkey] = bound
+                // update stored bound thresholds for this person since they're caught up to now
+                if (bound) {
+                  bound[1] = now
+                } else if (events.length) {
+                  // didn't have anything before, but now we have all of these
+                  bound = [events[events.length - 1].created_at, now]
+                } else {
+                  // no bound, no events
+                  bound = [now - 1, now]
+                }
+                console.log("new bound for", pubkey, bound)
+                outbox.thresholds[pubkey] = bound
 
-              sem.release()
-            })
+                sem.release()
+              })
+            )
           }
+
+          await Promise.all(promises)
 
           // now we've caught up with the current moment for everybody
           outbox.saveThresholds()
@@ -460,7 +469,6 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           </ToggleGroup>
         </div>
       </Show>
-
       <div class="space-y-4">
         <Switch>
           <Match when={isLoading()}>
@@ -479,9 +487,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           </Match>
         </Switch>
       </div>
-
       <div ref={ref} class="h-12 w-full flex items-center justify-center" />
-
       {/*
         {isFetchingNextPage ? (
           <Loader class="animate-spin rounded-full h-4 w-4" />
