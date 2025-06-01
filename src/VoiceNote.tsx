@@ -1,4 +1,3 @@
-import { bech32 } from "@scure/base"
 import { loadNostrUser } from "@nostr/gadgets/metadata"
 import { makeZapRequest } from "@nostr/tools/nip57"
 import { NostrEvent } from "@nostr/tools/pure"
@@ -35,7 +34,7 @@ import { cn } from "./components/utils"
 import user from "./user"
 import { formatZapAmount, getSatoshisAmountFromBolt11 } from "./utils"
 import settings from "./settings"
-import nwc from "./nwc"
+import nwc, { getZapEndpoint } from "./zap"
 import Create from "./Create"
 import { globalRelays } from "./nostr"
 
@@ -67,32 +66,7 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
 
   const location = useLocation()
 
-  const [zapEndpoint] = createResource(author, async author => {
-    const metadata = author.metadata
-    if (!metadata) return undefined
-
-    const { lud06, lud16 } = metadata
-    let lnurl: string
-    if (lud06) {
-      let { words } = bech32.decode(lud06, 1000)
-      let data = bech32.fromWords(words)
-      lnurl = new TextDecoder().decode(data)
-    } else if (lud16) {
-      let [name, domain] = lud16.split("@")
-      lnurl = new URL(`/.well-known/lnurlp/${name}`, `https://${domain}`).toString()
-    } else {
-      return undefined
-    }
-
-    let res = await fetch(lnurl)
-    let body = await res.json()
-
-    if (body.allowsNostr && body.nostrPubkey) {
-      return body.callback
-    }
-
-    return undefined
-  })
+  const [zapEndpoint] = createResource(author, getZapEndpoint)
 
   // check if the current user has reacted to this message and get reaction count, zap count, reply count etc
   let closer: SubCloser
