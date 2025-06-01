@@ -61,3 +61,11 @@ export function parseHashtags(input: string): string[] {
     .map(tag => tag.replace(/^#/, "").trim())
     .filter(tag => tag.length > 0)
 }
+
+export function prettyRelayURL(url: string): string {
+  let x = url.split("://")[1].split("?")[0]
+  while (x.endsWith("/")) {
+    x = x.substring(0, x.length - 1)
+  }
+  return x
+}

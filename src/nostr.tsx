@@ -1,9 +1,10 @@
 import { IDBEventStore } from "@nostr/gadgets/store"
 import { Filter } from "@nostr/tools/filter"
 
-export type Tab = {
-  baseFilter?: Filter
-} & ({ type: "relays"; relays: string[] } | { type: "users"; pubkeys: string[] })
+export type Tab =
+  | { type: "relays"; relays: string[]; baseFilter?: Filter }
+  | { type: "users"; pubkeys: string[]; baseFilter?: Filter }
+  | { type: "relaysubmenu"; items: string[] }
 export type DefinedTab = [string, Tab]
 
 export const globalRelays = [

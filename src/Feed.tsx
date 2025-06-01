@@ -1,19 +1,30 @@
 import { batch, createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { getSemaphore } from "@henrygd/semaphore"
 import { Globe, Loader, Telescope, User, Users } from "lucide-solid"
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer"
 import { NostrEvent } from "@nostr/tools/pure"
 import { Filter, matchFilter } from "@nostr/tools/filter"
 import { pool } from "@nostr/gadgets/global"
-import { loadFollowsList, loadRelayList } from "@nostr/gadgets/lists"
-import { SubCloser } from "@nostr/tools/abstract-pool"
-
-import VoiceNote from "./VoiceNote"
-import user from "./user"
-import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group"
-import { DefinedTab, global, outbox, Tab } from "./nostr"
 import { outboxFilterRelayBatch } from "@nostr/gadgets/outbox"
-import { getSemaphore } from "@henrygd/semaphore"
 import { DuplicateEventError } from "@nostr/gadgets/store"
+import { loadFavoriteRelays, loadFollowsList, loadRelayList } from "@nostr/gadgets/lists"
+import { SubCloser } from "@nostr/tools/abstract-pool"
+import { Image } from "@kobalte/core/image"
+
+import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "./components/ui/dropdown-menu"
+
+import user from "./user"
+import { DefinedTab, global, outbox, Tab } from "./nostr"
+import { prettyRelayURL } from "./utils"
+import VoiceNote from "./VoiceNote"
+import { Button } from "./components/ui/button"
+import { useNavigate } from "@solidjs/router"
 
 const NOTES_PER_PAGE = 3
 const INITIAL_THRESHOLD = 7
@@ -26,6 +37,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
   // eslint-disable-next-line solid/reactivity
   const [visibleTabs, setVisibleTabs] = createSignal<[string, Tab][]>(props.forcedTabs ?? [global])
   const [paginable, setPaginable] = createSignal(false)
+  const navigate = useNavigate()
 
   let pageManager: {
     showMore: () => void
@@ -49,16 +61,21 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
 
     signal.onabort = v => console.debug("aborted!", v)
 
-    const selected = tab()
+    const [selectedLabel, selectedTab] = tab()
     setPaginable(false)
+
+    if (selectedTab.type === "relaysubmenu") {
+      console.error("this should never happen")
+      return
+    }
 
     // ~
     ;(async () => {
-      console.log("starting subscription", selected)
+      console.log("starting subscription", selectedLabel, selectedTab)
       setLoading(true)
       setNotes([])
 
-      switch (selected[1].type) {
+      switch (selectedTab.type) {
         case "relays": {
           // relay feed
           const relayPager = {
@@ -78,14 +95,14 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           pageManager = relayPager
 
           const declaration: { url: string; filter: Filter }[] = []
-          for (let i = 0; i < selected[1].relays.length; i++) {
+          for (let i = 0; i < selectedTab.relays.length; i++) {
             declaration.push({
-              url: selected[1].relays[i],
+              url: selectedTab.relays[i],
               filter: {
                 kinds: [1222],
 
                 // hashtags and whatever else goes here
-                ...selected[1].baseFilter,
+                ...selectedTab.baseFilter,
 
                 // see note about this under "infinite scroll / pagination"
                 limit: 400
@@ -96,7 +113,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           let eosed = false
           let doneWaiting = setTimeout(flush, 2800)
           closer = pool.subscribeMap(declaration, {
-            label: `feed-${selected[0]}`,
+            label: `feed-${selectedLabel}`,
             onevent(event) {
               if (event.tags.find(t => t[0] === "e")) return
               relayPager.allEvents.push(event)
@@ -154,7 +171,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           pageManager = outboxPager
 
           // from whom we're going to fetch
-          const authors = selected[1].pubkeys
+          const authors = selectedTab.pubkeys
 
           // display what we have stored immediately
           for await (let evt of outbox.store.queryEvents({ kinds: [1222], authors, limit: 100 })) {
@@ -176,10 +193,10 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                 await outboxFilterRelayBatch(authors, {
                   kinds: [1222],
                   limit: 10,
-                  ...selected[1].baseFilter
+                  ...selectedTab.baseFilter
                 }),
                 {
-                  label: `preliminary-${selected[0]}`,
+                  label: `preliminary-${selectedLabel}`,
                   async onevent(event) {
                     preliminaryEvents.push(event)
 
@@ -277,7 +294,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                     await outbox.store.saveEvent(event)
 
                     // saved, now we know this was a new event, we can add it to our list of events to be displayed
-                    if (!selected[1].baseFilter || matchFilter(selected[1].baseFilter, event)) {
+                    if (!selectedTab.baseFilter || matchFilter(selectedTab.baseFilter, event)) {
                       outboxPager.allEvents.push(event)
                       outboxPager.threshold++
                       addedNewEventsOnSync = true
@@ -329,9 +346,9 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
             since: now - 60 * 60 * 2
           })
           closer = pool.subscribeMap(declaration, {
-            label: `feed-${selected[0]}`,
+            label: `feed-${selectedLabel}`,
             async onevent(event) {
-              if (!selected[1].baseFilter || matchFilter(selected[1].baseFilter, event)) {
+              if (!selectedTab.baseFilter || matchFilter(selectedTab.baseFilter, event)) {
                 outboxPager.allEvents.unshift(event)
                 setNotes(events => [event, ...events])
                 outboxPager.threshold++
@@ -476,8 +493,29 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
       return
     }
 
-    loadFollowsList(user().current.pubkey).then(follows => {
-      setVisibleTabs([global, ["Following", { type: "users", pubkeys: follows.items }]])
+    Promise.allSettled([
+      loadFollowsList(user().current.pubkey),
+      loadFavoriteRelays(user().current.pubkey)
+    ]).then(([fl, fr]) => {
+      const newTabs = [global]
+
+      if (fl.status === "fulfilled") {
+        newTabs.push(["Following", { type: "users", pubkeys: fl.value.items }])
+      }
+
+      if (fr.status === "fulfilled") {
+        let submenuItems = []
+        for (let item of fr.value.items) {
+          if (typeof item !== "string") continue // TODO: handle relay sets
+          submenuItems.push(item)
+        }
+
+        if (submenuItems.length > 0) {
+          newTabs.push(["Relays", { type: "relaysubmenu", items: submenuItems }])
+        }
+      }
+
+      setVisibleTabs(newTabs)
     })
   })
 
@@ -496,25 +534,95 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
         <div class="flex justify-center -mt-6 mb-2">
           <ToggleGroup value={tab()[0]} onChange={handleSelectTab}>
             <For each={visibleTabs()}>
-              {dt => (
-                <ToggleGroupItem value={dt[0]} aria-label={dt[0]}>
+              {dt => {
+                return (
                   <Switch>
                     <Match when={dt[0] === "Global"}>
-                      <Globe class="h-4 w-4 mr-2" />
+                      <ToggleGroupItem value={dt[0]} aria-label={dt[0]}>
+                        <Globe class="h-4 w-4 mr-2" />
+                        {dt[0]}
+                      </ToggleGroupItem>
                     </Match>
                     <Match when={dt[1].type === "users" && dt[1].pubkeys.length === 1}>
-                      <User class="h-4 w-4 mr-2" />
+                      <ToggleGroupItem value={dt[0]} aria-label={dt[0]}>
+                        <User class="h-4 w-4 mr-2" />
+                        {dt[0]}
+                      </ToggleGroupItem>
                     </Match>
                     <Match when={dt[1].type === "users" && dt[1].pubkeys.length > 1}>
-                      <Users class="h-4 w-4 mr-2" />
+                      <ToggleGroupItem value={dt[0]} aria-label={dt[0]}>
+                        <Users class="h-4 w-4 mr-2" />
+                        {dt[0]}
+                      </ToggleGroupItem>
+                    </Match>
+                    <Match when={dt[1].type === "relays" && dt[1].relays.length === 1}>
+                      <ToggleGroupItem value={dt[0]} aria-label={dt[0]}>
+                        <Image fallbackDelay={600}>
+                          <Image.Img
+                            src={new URL(
+                              "/favicon.ico",
+                              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                              // @ts-ignore
+                              dt[1].relays[0].replace("wss://", "https://")
+                            ).toString()}
+                            class="h-4 w-4 mr-2"
+                          />
+                          <Image.Fallback>
+                            <Telescope class="h-4 w-4 mr-2" />
+                          </Image.Fallback>
+                        </Image>
+                        {prettyRelayURL(dt[0])}
+                      </ToggleGroupItem>
                     </Match>
                     <Match when={dt[1].type === "relays"}>
-                      <Telescope class="h-4 w-4 mr-2" />
+                      <ToggleGroupItem value={dt[0]} aria-label={dt[0]}>
+                        <Telescope class="h-4 w-4 mr-2" />
+                        {dt[0]}
+                      </ToggleGroupItem>
+                    </Match>
+                    <Match when={dt[1].type === "relaysubmenu"}>
+                      <DropdownMenu placement="bottom" orientation="vertical">
+                        <DropdownMenuTrigger class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-transparent h-9 px-3 hover:bg-muted hover:text-muted-foreground data-[pressed]:bg-accent data-[pressed]:text-accent-foreground">
+                          <Telescope class="h-4 w-4 mr-2" />
+                          {dt[0]}
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                          {/* @ts-ignore */}
+                          <For each={dt[1].items}>
+                            {relay => (
+                              <DropdownMenuItem>
+                                <Button
+                                  variant="ghost"
+                                  aria-label={relay}
+                                  class="justify-start w-full"
+                                  onClick={() =>
+                                    navigate(`/r/${encodeURIComponent(prettyRelayURL(relay))}`)
+                                  }
+                                >
+                                  <Image>
+                                    <Image.Img
+                                      src={new URL(
+                                        "/favicon.ico",
+                                        relay.replace("wss://", "https://")
+                                      ).toString()}
+                                      class="h-4 w-4 mr-2"
+                                    />
+                                    <Image.Fallback>
+                                      <Telescope class="h-4 w-4 mr-2" />
+                                    </Image.Fallback>
+                                  </Image>
+                                  {prettyRelayURL(relay)}
+                                </Button>
+                              </DropdownMenuItem>
+                            )}
+                          </For>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </Match>
                   </Switch>
-                  {dt[0]}
-                </ToggleGroupItem>
-              )}
+                )
+              }}
             </For>
           </ToggleGroup>
         </div>
