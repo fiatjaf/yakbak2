@@ -218,7 +218,7 @@ function Create(props: {
             onClick={handleRecord}
             size={props.replyingTo ? "sm" : "lg"}
             variant={props.replyingTo ? "ghost" : undefined}
-            class="h-16 w-16 shadow-lg rounded-[50%] transition-transform duration-200 text-white bg-destructive hover:bg-destructive/90"
+            class="h-16 w-16 shadow-lg rounded-[50%] text-white bg-destructive hover:bg-destructive/90"
             title={props.replyingTo ? "Replies" : undefined}
           >
             <div class="flex flex-col items-center">
