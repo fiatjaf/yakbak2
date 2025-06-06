@@ -1,6 +1,7 @@
 import { ArrowUpToLine, Hash, Loader, Mic, MicOff, Pause, Play, Trash2 } from "lucide-solid"
 import { toast } from "solid-sonner"
 import {
+  batch,
   createResource,
   createSignal,
   For,
@@ -217,7 +218,7 @@ function Create(props: {
             onClick={handleRecord}
             size={props.replyingTo ? "sm" : "lg"}
             variant={props.replyingTo ? "ghost" : undefined}
-            class="h-16 w-16 shadow-lg rounded-[50%] transition-transform duration-200 bg-destructive hover:bg-destructive/90"
+            class="h-16 w-16 shadow-lg rounded-[50%] transition-transform duration-200 text-white bg-destructive hover:bg-destructive/90"
             title={props.replyingTo ? "Replies" : undefined}
           >
             <div class="flex flex-col items-center">
@@ -334,19 +335,23 @@ function Create(props: {
   }
 
   function handleDiscardRecording() {
-    if (previewUrl()) {
-      URL.revokeObjectURL(previewUrl())
-      setPreviewUrl(null)
-      toast.info("Voice message discarded")
-    }
-    setIsPlaying(false)
-    setRecordingDuration(0)
-    setHashtags([])
-    setNewHashtag("")
+    batch(() => {
+      if (previewUrl()) {
+        URL.revokeObjectURL(previewUrl())
+        setPreviewUrl(null)
+        toast.info("Voice message discarded")
+      }
+      setIsPlaying(false)
+      setRecordingDuration(0)
+      setHashtags([])
+      setNewHashtag("")
+    })
   }
 
   function handlePlayPause() {
-    if (!audioRef) {
+    if (audioRef) {
+      audioRef.src = previewUrl()
+    } else {
       audioRef = new Audio(previewUrl())
       audioRef.onended = () => {
         setIsPlaying(false)
