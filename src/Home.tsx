@@ -9,7 +9,7 @@ function Home() {
   return (
     <div class="container mx-auto px-4 py-8 max-w-2xl">
       <Feed />
-      <Show when={user()?.current && !recordingReply()}>
+      <Show when={!recordingReply()}>
         <div class="fixed bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
           <Create vanishesOnScroll />
         </div>

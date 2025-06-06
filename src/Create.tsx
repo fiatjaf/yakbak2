@@ -24,6 +24,7 @@ import { getBlossomServers, uploadToBlossom } from "./blossom"
 import { Badge } from "./components/ui/badge"
 import { NostrEvent } from "@nostr/tools/pure"
 import { recordingReply, recordingRoot, setRecordingReply, setRecordingRoot } from "./global"
+import { setLoginDialogOpen } from "./LoginArea"
 
 function Create(props: {
   replyingTo?: NostrEvent
@@ -262,8 +263,9 @@ function Create(props: {
   )
 
   async function handleRecord() {
-    if (!user()?.current) {
-      // don't do anything if the user is not logged in
+    if (!user().current) {
+      // prompt the user to log in and exit?
+      setLoginDialogOpen(true)
       return
     }
 

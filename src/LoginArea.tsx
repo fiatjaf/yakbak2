@@ -7,8 +7,9 @@ import { Button } from "./components/ui/button"
 import LoginDialog from "./LoginDialog"
 import SignupDialog from "./SignupDialog"
 
+export const [loginDialogOpen, setLoginDialogOpen] = createSignal(false)
+
 function LoginArea() {
-  const [loginDialogOpen, setLoginDialogOpen] = createSignal(false)
   const [signupDialogOpen, setSignupDialogOpen] = createSignal(false)
 
   const handleLogin = () => {
