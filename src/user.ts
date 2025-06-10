@@ -4,7 +4,7 @@ import { BunkerSigner, parseBunkerInput } from "@nostr/tools/nip46"
 import { createSignal } from "solid-js"
 import { EventTemplate, finalizeEvent, generateSecretKey, getPublicKey } from "@nostr/tools/pure"
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils"
-import { VerifiedEvent } from "@nostr/tools"
+import { VerifiedEvent } from "@nostr/tools/pure"
 
 type User = NostrUser & { signer: Signer } & { _method: string }
 type Signer = { signEvent: (event: EventTemplate) => Promise<VerifiedEvent> }

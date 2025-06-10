@@ -1,4 +1,14 @@
-import { batch, createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import {
+  batch,
+  createEffect,
+  createRoot,
+  createSignal,
+  For,
+  Match,
+  onCleanup,
+  Show,
+  Switch
+} from "solid-js"
 import { Globe, Loader, Telescope, User, Users } from "lucide-solid"
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer"
 import { NostrEvent } from "@nostr/tools/pure"
@@ -49,12 +59,12 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
   const visible = createVisibilityObserver({ threshold: 1 })(() => ref)
 
   onCleanup(() => {
-    if (closer) closer.close()
+    if (closer) closer.close("<Feed /> component cleanup")
     abort.abort("<Feed /> component cleanup")
   })
 
   createEffect(() => {
-    if (closer) closer.close()
+    if (closer) closer.close("<Feed /> tab changed")
     abort.abort("<Feed /> tab changed")
     abort = new AbortController()
     const signal = abort.signal
@@ -114,7 +124,26 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           let eosed = false
           let doneWaiting = setTimeout(flush, 2800)
           closer = pool.subscribeMap(declaration, {
-            onauth: evtt => user().current.signer.signEvent(evtt),
+            onauth: async evtt => {
+              if (!user().current) {
+                await new Promise<void>((resolve, reject) => {
+                  createRoot(dispose => {
+                    createEffect(() => {
+                      if (user().current) {
+                        dispose()
+                        resolve()
+                      }
+                    })
+
+                    setTimeout(() => {
+                      dispose()
+                      reject()
+                    }, 3000)
+                  })
+                })
+              }
+              return user().current?.signer?.signEvent?.(evtt)
+            },
             label: `feed-${selectedLabel}`,
             onevent(event) {
               relayPager.allEvents.push(event)
@@ -132,7 +161,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           })
 
           signal.addEventListener("abort", () => {
-            closer.close()
+            closer.close("signal aborted")
           })
 
           function flush() {
@@ -254,7 +283,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                     }
                   },
                   oneose() {
-                    preliminarySub.close()
+                    preliminarySub.close("preliminary req closed automatically on eose")
                     if (signal.aborted) return
                     preliminaryEvents.sort((a, b) => b.created_at - a.created_at)
                     batch(() => {
@@ -268,7 +297,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                 }
               )
 
-              signal.addEventListener("abort", () => preliminarySub.close())
+              signal.addEventListener("abort", () => preliminarySub.close("signal aborted"))
             })
           }
 
