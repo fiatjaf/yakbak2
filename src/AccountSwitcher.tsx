@@ -17,7 +17,7 @@ function AccountSwitcher(props: { onAddAccountClick: () => void }) {
     <Show when={user().current}>
       <DropdownMenu>
         <DropdownMenuTrigger>
-          <button class="flex items-center gap-3 p-3 rounded-full hover:bg-accent transition-all w-full text-foreground">
+          <button class="cursor-pointer flex items-center gap-3 p-3 rounded-full hover:bg-accent transition-all w-full text-foreground">
             <Avatar class="w-10 h-10">
               <AvatarImage
                 src={user().current.metadata.picture}

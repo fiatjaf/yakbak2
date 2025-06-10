@@ -26,7 +26,7 @@ function LoginArea() {
         <Match when={!user().current}>
           <Button
             onClick={() => setLoginDialogOpen(true)}
-            class="flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground w-full font-medium transition-all hover:bg-primary/90 animate-scale-in"
+            class="cursor-pointer flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground w-full font-medium transition-all hover:bg-primary/90 animate-scale-in"
           >
             <User class="w-4 h-4" />
             <span>Log in</span>
