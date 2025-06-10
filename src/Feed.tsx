@@ -114,6 +114,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           let eosed = false
           let doneWaiting = setTimeout(flush, 2800)
           closer = pool.subscribeMap(declaration, {
+            onauth: evtt => user().current.signer.signEvent(evtt),
             label: `feed-${selectedLabel}`,
             onevent(event) {
               relayPager.allEvents.push(event)
