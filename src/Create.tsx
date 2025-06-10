@@ -458,7 +458,9 @@ function Create(props: {
           : // in any other case send just to our outbox
             ourOutbox()
 
-      const pubs = pool.publish(relays, event)
+      const pubs = pool.publish(relays, event, {
+        onauth: evtt => user().current.signer.signEvent(evtt)
+      })
       try {
         await Promise.any(pubs)
       } catch (err) {

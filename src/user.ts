@@ -2,17 +2,12 @@ import { loadNostrUser, NostrUser } from "@nostr/gadgets/metadata"
 import { decode } from "@nostr/tools/nip19"
 import { BunkerSigner, parseBunkerInput } from "@nostr/tools/nip46"
 import { createSignal } from "solid-js"
-import {
-  EventTemplate,
-  finalizeEvent,
-  generateSecretKey,
-  getPublicKey,
-  NostrEvent
-} from "@nostr/tools/pure"
+import { EventTemplate, finalizeEvent, generateSecretKey, getPublicKey } from "@nostr/tools/pure"
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils"
+import { VerifiedEvent } from "@nostr/tools"
 
 type User = NostrUser & { signer: Signer } & { _method: string }
-type Signer = { signEvent: (event: EventTemplate) => Promise<NostrEvent> }
+type Signer = { signEvent: (event: EventTemplate) => Promise<VerifiedEvent> }
 
 const [user, set] = createSignal<{
   current: User | null
