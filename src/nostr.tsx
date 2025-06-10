@@ -1,4 +1,4 @@
-import { IDBEventStore } from "@nostr/gadgets/store"
+import { OutboxManager } from "@nostr/gadgets/outbox"
 import { Filter } from "@nostr/tools/filter"
 
 export type Tab =
@@ -22,18 +22,4 @@ export const global: DefinedTab = [
   }
 ]
 
-export class OutboxDB {
-  store: IDBEventStore
-  thresholds: { [pubkey: string]: [oldest: number, newest: number] }
-
-  constructor() {
-    this.store = new IDBEventStore()
-    this.thresholds = JSON.parse(localStorage.getItem("thresholds") || "{}")
-  }
-
-  saveThresholds() {
-    localStorage.setItem("thresholds", JSON.stringify(this.thresholds))
-  }
-}
-
-export const outbox = new OutboxDB()
+export const outbox = new OutboxManager([1222, 1244])

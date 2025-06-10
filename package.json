@@ -21,15 +21,15 @@
   "dependencies": {
     "@fiatjaf/lru-cache": "npm:@jsr/fiatjaf__lru-cache@^0.0.1",
     "@getalby/sdk": "^5.0.0",
-    "@henrygd/semaphore": "npm:@jsr/henrygd__semaphore@^0.0.2",
     "@kobalte/core": "^0.13.9",
-    "@nostr/gadgets": "npm:@jsr/nostr__gadgets@^0.0.27",
-    "@nostr/tools": "npm:@jsr/nostr__tools@^2.13.2",
+    "@nostr/gadgets": "npm:@jsr/nostr__gadgets@^0.0.30",
+    "@nostr/tools": "npm:@jsr/nostr__tools@^2.13.3",
     "@solid-primitives/intersection-observer": "^2.2.1",
     "@solidjs/router": "^0.15.3",
     "@tailwindcss/vite": "^4.1.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "debounce": "^2.2.0",
     "lucide-solid": "^0.511.0",
     "solid-js": "^1.9.5",
     "solid-sonner": "^0.2.8",
@@ -37,4 +37,3 @@
     "tailwindcss-animate": "^1.0.7"
   }
 }
-

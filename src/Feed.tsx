@@ -1,13 +1,12 @@
 import { batch, createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
-import { getSemaphore } from "@henrygd/semaphore"
 import { Globe, Loader, Telescope, User, Users } from "lucide-solid"
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer"
 import { NostrEvent } from "@nostr/tools/pure"
-import { Filter, matchFilter } from "@nostr/tools/filter"
+import { Filter } from "@nostr/tools/filter"
 import { pool } from "@nostr/gadgets/global"
 import { outboxFilterRelayBatch } from "@nostr/gadgets/outbox"
 import { DuplicateEventError } from "@nostr/gadgets/store"
-import { loadFavoriteRelays, loadFollowsList, loadRelayList } from "@nostr/gadgets/lists"
+import { loadFavoriteRelays, loadFollowsList } from "@nostr/gadgets/lists"
 import { SubCloser } from "@nostr/tools/abstract-pool"
 import { Image } from "@kobalte/core/image"
 
@@ -25,6 +24,7 @@ import { prettyRelayURL } from "./utils"
 import VoiceNote from "./VoiceNote"
 import { Button } from "./components/ui/button"
 import { useNavigate } from "@solidjs/router"
+import debounce from "debounce"
 
 const NOTES_PER_PAGE = 3
 const INITIAL_THRESHOLD = 7
@@ -72,6 +72,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
     // ~
     ;(async () => {
       console.log("starting subscription", selectedLabel, selectedTab)
+      setPaginable(false)
       setLoading(true)
       setNotes([])
 
@@ -115,7 +116,6 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           closer = pool.subscribeMap(declaration, {
             label: `feed-${selectedLabel}`,
             onevent(event) {
-              if (event.tags.find(t => t[0] === "e")) return
               relayPager.allEvents.push(event)
               if (eosed) {
                 relayPager.allEvents.unshift(event)
@@ -130,7 +130,13 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
             }
           })
 
+          signal.addEventListener("abort", () => {
+            closer.close()
+          })
+
           function flush() {
+            if (signal.aborted) return
+
             relayPager.allEvents.sort((a, b) => b.created_at - a.created_at)
             batch(() => {
               setNotes(relayPager.allEvents.slice(0, relayPager.threshold))
@@ -142,57 +148,93 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           break
         }
         case "users": {
-          // outbox feed
-          const outboxPager = {
-            allEvents: [],
-            threshold: INITIAL_THRESHOLD,
-            showMore() {
-              const hasNew = this.allEvents.length > this.threshold
-              if (hasNew) {
-                this.threshold += NOTES_PER_PAGE
-                setNotes(this.allEvents.slice(0, this.threshold))
-              } else {
-                setPaginable(false)
-
-                if (this.allEvents.length) {
-                  maybeFetchBackwardsUntil(
-                    this.allEvents[this.allEvents.length - 1].created_at
-                  ).then(() => {
-                    if (signal.aborted) return
-
-                    this.threshold += NOTES_PER_PAGE
-                    setNotes(this.allEvents.slice(0, this.threshold))
-                    setPaginable(true)
-                  })
-                }
-              }
-            }
-          }
-          pageManager = outboxPager
-
           // from whom we're going to fetch
           const authors = selectedTab.pubkeys
 
-          // display what we have stored immediately
-          for await (let evt of outbox.store.queryEvents({ kinds: [1222], authors, limit: 100 })) {
-            if (signal.aborted) return
-            outboxPager.allEvents.push(evt)
+          // this will be used in filtering what we display, not what we sync
+          const baseFilter = selectedTab.baseFilter
+
+          const outboxPager: {
+            // this is just a count of how many times showMore() has been called
+            page: number
+            // ended means we won't paginate back ever again
+            ended: boolean
+            expectedLimit: () => number
+            showMore: () => void
+          } = {
+            page: 0,
+            ended: false,
+            expectedLimit() {
+              return INITIAL_THRESHOLD + NOTES_PER_PAGE * outboxPager.page
+            },
+            async showMore() {
+              if (this.ended) return
+
+              setPaginable(false)
+              this.page++
+              const expected = this.expectedLimit()
+              let total = await flush()
+              if (total < expected) {
+                // gotta ask relays for more older stuff
+                let lastNoteWeHave = notes().slice(-1)[0]
+                if (lastNoteWeHave) {
+                  console.debug("asking relays for stuff older than", lastNoteWeHave.created_at)
+                  await outbox.before(authors, lastNoteWeHave.created_at - 1, signal)
+                  // now we can flush again
+                  let total = await flush()
+                  if (total < expected) {
+                    console.debug(
+                      `failed to fetch anything more for ${authors} declaring this feed ended`
+                    )
+                    this.ended = true
+                  }
+                }
+              }
+              setTimeout(() => {
+                setPaginable(true)
+              }, 1000)
+            }
           }
 
+          pageManager = outboxPager
+
+          async function flush(): Promise<number> {
+            let total = 0
+            let events: NostrEvent[] = []
+            for await (let evt of outbox.store.queryEvents({
+              kinds: [1222],
+              authors,
+              ...baseFilter,
+              limit: outboxPager.expectedLimit()
+            })) {
+              if (signal.aborted) return
+              events.push(evt)
+              total++
+            }
+
+            batch(() => {
+              setNotes(events)
+              setLoading(events.length === 0)
+            })
+
+            return total
+          }
+
+          // display what we have stored immediately
+          await flush()
           if (signal.aborted) return
-          console.debug("stored events:", authors, outboxPager.allEvents)
-          if (outboxPager.allEvents.length !== 0) {
-            flush()
-          } else {
-            // if there is nothing in the database we do a preliminary query
-            // just to show something before we start the "sync" process below
+
+          // if we don't have anything stored, do a preliminary fetch
+          // (just to show something before we start the "sync" process below)
+          let preliminary: Promise<void>
+          if (notes().length === 0) {
             console.debug("doing preliminary fetch before the full sync process")
-            await new Promise(async resolve => {
+            preliminary = new Promise<void>(async resolve => {
               let preliminaryEvents: NostrEvent[] = []
               let preliminarySub = pool.subscribeMap(
                 await outboxFilterRelayBatch(authors, {
                   kinds: [1222],
-                  limit: 10,
+                  limit: outboxPager.expectedLimit(),
                   ...selectedTab.baseFilter
                 }),
                 {
@@ -219,256 +261,29 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                       setLoading(false)
                     })
                   },
-                  onclose: resolve
+                  onclose() {
+                    resolve()
+                  }
                 }
               )
+
+              signal.addEventListener("abort", () => preliminarySub.close())
             })
           }
 
-          // sync up each of the pubkeys to present
-          console.log("starting catch up sync")
-          let addedNewEventsOnSync = false
-          const now = Math.round(Date.now() / 1000)
-          const promises: Promise<void>[] = []
-          for (let i = 0; i < authors.length; i++) {
-            let pubkey = authors[i]
-            let bound = outbox.thresholds[pubkey]
-            let newest = bound ? bound[1] : undefined
+          // now do the sync from wherever we left before (or an indeterminate point in the past) to now
+          let addedNewEvents = await outbox.sync(authors, signal)
 
-            if (newest > now - 60 * 60 * 2) {
-              // if this person was caught up to 2 hours ago there is no need to repeat this
-              // (we'll make up for these missing events in the ongoing live subscription)
-              console.log(`${i + 1}/${authors.length} skip`, newest, ">", now - 60 * 60 * 2)
-              continue
-            }
-
-            const sem = getSemaphore("outbox-sync", 15) // do it only 15 pubkeys at a time
-            promises.push(
-              sem.acquire().then(async () => {
-                if (signal.aborted) {
-                  sem.release()
-                  return
-                }
-
-                let relays = (await loadRelayList(pubkey)).items
-                  .filter(r => r.write)
-                  .slice(0, 4)
-                  .map(r => r.url)
-
-                if (signal.aborted) {
-                  sem.release()
-                  return
-                }
-
-                let events: NostrEvent[]
-                try {
-                  events = await Promise.race([
-                    pool.querySync(
-                      relays,
-                      { kinds: [1222, 1244], authors: [pubkey], since: newest, limit: 200 },
-                      { label: `catchup-${pubkey.substring(0, 6)}` }
-                    ),
-                    new Promise<NostrEvent[]>((_, rej) => setTimeout(rej, 5000))
-                  ])
-                } catch (err) {
-                  console.warn("failed to query events for", pubkey, "at", relays)
-                  events = []
-                }
-
-                if (signal.aborted) {
-                  sem.release()
-                  return
-                }
-
-                console.debug(
-                  `${i + 1}/${authors.length} catching up with`,
-                  pubkey,
-                  relays,
-                  { kinds: [1222, 1244], authors: [pubkey], since: newest },
-                  `got ${events.length} events`,
-                  events
-                )
-
-                for (let event of events) {
-                  try {
-                    await outbox.store.saveEvent(event)
-
-                    // saved, now we know this was a new event, we can add it to our list of events to be displayed
-                    if (!selectedTab.baseFilter || matchFilter(selectedTab.baseFilter, event)) {
-                      outboxPager.allEvents.push(event)
-                      outboxPager.threshold++
-                      addedNewEventsOnSync = true
-                    }
-                  } catch (err) {
-                    if (err instanceof DuplicateEventError) {
-                      console.warn("tried to save duplicate:", event)
-                    } else {
-                      throw err
-                    }
-                  }
-                }
-
-                // update stored bound thresholds for this person since they're caught up to now
-                if (bound) {
-                  bound[1] = now
-                } else if (events.length) {
-                  // didn't have anything before, but now we have all of these
-                  bound = [events[events.length - 1].created_at, now]
-                } else {
-                  // no bound, no events
-                  bound = [now - 1, now]
-                }
-                console.debug("new bound for", pubkey, bound)
-                outbox.thresholds[pubkey] = bound
-
-                sem.release()
-              })
-            )
-          }
-
-          await Promise.all(promises)
-
-          // now we've caught up with the current moment for everybody
-          outbox.saveThresholds()
+          // after the sync we can show the events we have in the database
+          await preliminary
           if (signal.aborted) return
-
-          console.debug(`all caught up`)
+          if (addedNewEvents) {
+            await flush()
+          }
           setPaginable(true)
 
-          if (addedNewEventsOnSync) {
-            outboxPager.allEvents.sort((a, b) => b.created_at - a.created_at)
-            flush()
-          }
-
           // finally open this ongoing subscription
-          const declaration = await outboxFilterRelayBatch(authors, {
-            kinds: [1222, 1244],
-            since: now - 60 * 60 * 2
-          })
-          closer = pool.subscribeMap(declaration, {
-            label: `feed-${selectedLabel}`,
-            async onevent(event) {
-              if (!selectedTab.baseFilter || matchFilter(selectedTab.baseFilter, event)) {
-                outboxPager.allEvents.unshift(event)
-                setNotes(events => [event, ...events])
-                outboxPager.threshold++
-              }
-
-              try {
-                await outbox.store.saveEvent(event)
-
-                this.thresholds[event.pubkey][1] = Math.round(Date.now() / 1000)
-              } catch (err) {
-                if (err instanceof DuplicateEventError) {
-                  console.warn("tried to save duplicate from ongoing:", event)
-                } else {
-                  throw err
-                }
-              }
-            }
-          })
-
-          function flush() {
-            batch(() => {
-              setNotes(
-                outboxPager.allEvents.slice(
-                  0,
-                  Math.min(outboxPager.allEvents.length, outboxPager.threshold)
-                )
-              )
-              setLoading(outboxPager.allEvents.length === 0)
-            })
-          }
-
-          async function maybeFetchBackwardsUntil(ts: number) {
-            // from all our authors check which ones need a new page fetch
-            for (let pubkey of authors) {
-              const sem = getSemaphore("outbox-sync", 15) // do it only 15 pubkeys at a time
-              await sem.acquire().then(async () => {
-                if (signal.aborted) {
-                  sem.release()
-                  return
-                }
-
-                let bound = outbox.thresholds[pubkey]
-                if (!bound) {
-                  // this should never happen because we set the bounds for everybody
-                  // (on the first fetch if they don't have one)
-                  console.error("pagination on pubkey without a bound", pubkey)
-                  sem.release()
-                  return
-                }
-
-                let oldest = bound ? bound[0] : undefined
-
-                // if we already have events for this person that are older don't try to fetch anything
-                if (oldest < ts) {
-                  sem.release()
-                  return
-                }
-
-                let relays = (await loadRelayList(pubkey)).items
-                  .filter(r => r.write)
-                  .slice(0, 4)
-                  .map(r => r.url)
-
-                if (signal.aborted) {
-                  sem.release()
-                  return
-                }
-
-                const events = await pool.querySync(
-                  relays,
-                  { kinds: [1222, 1244], authors: [pubkey], until: oldest, limit: 200 },
-                  { label: `page-${pubkey.substring(0, 6)}` }
-                )
-
-                console.debug(
-                  "paginating to the past",
-                  pubkey,
-                  relays,
-                  { kinds: [1222, 1244], authors: [pubkey], until: oldest },
-                  events
-                )
-
-                for (let event of events) {
-                  try {
-                    await outbox.store.saveEvent(event)
-                  } catch (err) {
-                    if (err instanceof DuplicateEventError) {
-                      console.warn("tried to save duplicate:", event)
-                    } else {
-                      throw err
-                    }
-                  }
-                }
-
-                // update oldest bound threshold
-                if (events.length) {
-                  // didn't have anything before, but now we have all of these
-                  bound[0] = events[events.length - 1].created_at
-                }
-                console.debug("updated bound for", pubkey, bound)
-                outbox.thresholds[pubkey] = bound
-
-                sem.release()
-              })
-            }
-
-            outbox.saveThresholds()
-            console.debug("paginated back")
-
-            // after having downloaded more stuff from everybody we needed we can grab stuff from our database
-            // and put it in memory
-            for await (let evt of outbox.store.queryEvents({
-              kinds: [1222],
-              authors,
-              until: ts - 1,
-              limit: 100
-            })) {
-              outboxPager.allEvents.push(evt)
-            }
-          }
+          outbox.live(authors, debounce(flush, 500), signal)
         }
       }
     })()
@@ -645,6 +460,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           </Match>
         </Switch>
       </div>
+
       <div ref={ref} class="h-12 w-full flex items-center justify-center" />
       {/*
         {isFetchingNextPage ? (
