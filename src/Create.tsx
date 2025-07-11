@@ -26,6 +26,8 @@ import { NostrEvent } from "@nostr/tools/pure"
 import { recordingReply, recordingRoot, setRecordingReply, setRecordingRoot } from "./global"
 import { setLoginDialogOpen } from "./LoginArea"
 
+const recordingMime = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/webm"
+
 function Create(props: {
   replyingTo?: NostrEvent
   children?: JSXElement
@@ -321,7 +323,9 @@ function Create(props: {
         }
       }, 1000)
 
-      const recorder = new MediaRecorder(stream)
+      const recorder = new MediaRecorder(stream, {
+        mimeType: recordingMime
+      })
       const audioChunks: Blob[] = []
 
       recorder.ondataavailable = event => {
@@ -329,7 +333,7 @@ function Create(props: {
       }
 
       recorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunks, { type: "audio/webm" })
+        const audioBlob = new Blob(audioChunks, { type: recordingMime })
         const url = URL.createObjectURL(audioBlob)
         setPreviewUrl(url)
         clearInterval(recordingInterval)
@@ -391,7 +395,7 @@ function Create(props: {
 
     const response = await fetch(previewUrl())
     const audioBlob = await response.blob()
-    const audioBlobWithType = new Blob([audioBlob], { type: "video/webm" })
+    const audioBlobWithType = new Blob([audioBlob], { type: recordingMime })
 
     const blossomServers = await getBlossomServers(user().current.pubkey)
     if (!blossomServers.length) {
