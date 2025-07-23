@@ -17,7 +17,7 @@ import { Button } from "./components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./components/ui/dialog"
 import { Input } from "./components/ui/input"
 import user from "./user"
-import { parseHashtags, prettyRelayURL } from "./utils"
+import { generateWaveform, parseHashtags, prettyRelayURL } from "./utils"
 import { pool } from "@nostr/gadgets/global"
 import { loadRelayList } from "@nostr/gadgets/lists"
 import { getBlossomServers, uploadToBlossom } from "./blossom"
@@ -389,7 +389,6 @@ function Create(props: {
       setIsPlaying(true)
     }
   }
-
   async function handlePublishRecording() {
     setIsUploading(true)
 
@@ -404,6 +403,8 @@ function Create(props: {
       return
     }
 
+    const waveform = await generateWaveform(audioBlob)
+
     try {
       const audioUrl = await uploadToBlossom(audioBlobWithType, blossomServers)
       const event = await user().current.signer.signEvent({
@@ -412,7 +413,12 @@ function Create(props: {
         content: audioUrl,
         tags: [
           ...hashtags().map(tag => ["t", tag]),
-          ["imeta", `url ${audioUrl}`, `duration ${Math.round(recordingIntervals() / 10)}`],
+          [
+            "imeta",
+            `url ${audioUrl}`,
+            `duration ${Math.round(recordingIntervals() / 10)}`,
+            ...(waveform.length > 0 ? [`waveform ${waveform.join(" ")}`] : [])
+          ],
           ...(props.replyingTo // nip22-like tags
             ? [
                 ["p", props.replyingTo.pubkey],
@@ -478,10 +484,10 @@ function Create(props: {
 
       toast.success("Voice message published successfully")
       if (previewUrl()) {
+        setRecordingIntervals(0)
         URL.revokeObjectURL(previewUrl())
         setPreviewUrl(null)
       }
-      setRecordingIntervals(0)
     } catch (err) {
       console.error("failed to publish", err)
       toast.error("Failed to publish: " + String(err))

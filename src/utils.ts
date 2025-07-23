@@ -69,3 +69,32 @@ export function prettyRelayURL(url: string): string {
   }
   return x
 }
+
+export async function generateWaveform(audioBlob: Blob, samples = 100): Promise<number[]> {
+  const audioContext = new AudioContext()
+  const arrayBuffer = await audioBlob.arrayBuffer()
+  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+
+  const channelData = audioBuffer.getChannelData(0) // Get first channel
+  const blockSize = Math.floor(channelData.length / samples)
+  const waveform: number[] = []
+
+  for (let i = 0; i < samples; i++) {
+    const start = blockSize * i
+    let sum = 0
+
+    // calculate RMS (Root Mean Square) for this block
+    for (let j = 0; j < blockSize; j++) {
+      const amplitude = channelData[start + j]
+      sum += amplitude * amplitude
+    }
+
+    // normalize to 0-1 range, with some scaling for better visualization
+    const rms = Math.sqrt(sum / blockSize)
+    const normalized = Math.min(1, rms * 3)
+    waveform.push(normalized)
+  }
+
+  audioContext.close()
+  return waveform
+}

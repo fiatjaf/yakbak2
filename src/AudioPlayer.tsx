@@ -15,12 +15,23 @@ function AudioPlayer(props: { event: NostrEvent }) {
       ?.find(item => item.startsWith("url "))
       ?.split(" ")[1] ?? props.event.content
 
-  const waveform = () =>
-    imeta()
+  const waveform = () => {
+    let entries = imeta()
       ?.find(item => item.startsWith("waveform "))
       ?.split(" ")
       .slice(1)
-      .map(parseFloat) ?? Array.from({ length: 100 }, () => 0.8)
+      .map(parseFloat)
+    if (entries) {
+      let max = 0
+      for (let i = 0; i < entries.length; i++) {
+        if (entries[i] > max) max = entries[i]
+      }
+
+      return entries.map(v => Math.max(0.05, v / max))
+    }
+
+    return Array.from({ length: 100 }, () => 0.8)
+  }
 
   createEffect(() => {
     const dur = imeta()
@@ -116,9 +127,9 @@ function AudioPlayer(props: { event: NostrEvent }) {
                   return (
                     <rect
                       x={x()}
-                      y={50 - (height * 50) / 2}
+                      y={50 - (height * 100) / 2}
                       width={width}
-                      height={height * 50}
+                      height={height * 100}
                       fill={isPassed() ? "currentColor" : "currentColor"}
                       opacity={isPassed() ? 1 : 0.3}
                       class="transition-opacity"
