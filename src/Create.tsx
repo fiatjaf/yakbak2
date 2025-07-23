@@ -46,7 +46,7 @@ function Create(props: {
     : [recordingRoot, setRecordingRoot]
   const [previewUrl, setPreviewUrl] = createSignal<string | null>(null)
   const [isUploading, setIsUploading] = createSignal(false)
-  const [recordingDuration, setRecordingDuration] = createSignal(0)
+  const [recordingIntervals, setRecordingIntervals] = createSignal(0) // each interval is 0.1s
   let recordingInterval: number
   const [isPlaying, setIsPlaying] = createSignal(false)
   const [hashtags, setHashtags] = createSignal<string[]>([])
@@ -242,7 +242,7 @@ function Create(props: {
             >
               <div class="flex flex-col items-center">
                 <MicOff class="h-6 w-6" />
-                <span class="text-xs mt-1">{recordingDuration()}s / 60</span>
+                <span class="text-xs mt-1">{Math.round(recordingIntervals() / 10)}s / 60</span>
               </div>
             </Button>
           </div>
@@ -314,14 +314,14 @@ function Create(props: {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       setIsRecording(true)
       setPreviewUrl(null)
-      setRecordingDuration(0)
+      setRecordingIntervals(0)
 
       recordingInterval = setInterval(() => {
-        setRecordingDuration(curr => curr + 1)
-        if (recordingDuration() >= 60) {
+        setRecordingIntervals(curr => curr + 1)
+        if (recordingIntervals() >= 600) {
           stopRecording()
         }
-      }, 1000)
+      }, 100)
 
       const recorder = new MediaRecorder(stream, {
         mimeType: recordingMime
@@ -365,7 +365,7 @@ function Create(props: {
         toast.info("Voice message discarded")
       }
       setIsPlaying(false)
-      setRecordingDuration(0)
+      setRecordingIntervals(0)
       setHashtags([])
       setNewHashtag("")
     })
@@ -412,6 +412,7 @@ function Create(props: {
         content: audioUrl,
         tags: [
           ...hashtags().map(tag => ["t", tag]),
+          ["imeta", `url ${audioUrl}`, `duration ${Math.round(recordingIntervals() / 10)}`],
           ...(props.replyingTo // nip22-like tags
             ? [
                 ["p", props.replyingTo.pubkey],
@@ -480,7 +481,7 @@ function Create(props: {
         URL.revokeObjectURL(previewUrl())
         setPreviewUrl(null)
       }
-      setRecordingDuration(0)
+      setRecordingIntervals(0)
     } catch (err) {
       console.error("failed to publish", err)
       toast.error("Failed to publish: " + String(err))

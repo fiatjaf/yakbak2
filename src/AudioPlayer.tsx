@@ -28,7 +28,7 @@ function AudioPlayer(props: { event: NostrEvent }) {
       ?.split(" ")[1]
 
     if (dur) {
-      const duration = parseInt(dur)
+      const duration = parseFloat(dur)
       if (duration > 0) {
         setDuration(duration)
       }
