@@ -37,6 +37,7 @@ import settings from "./settings"
 import nwc, { getZapEndpoint } from "./zap"
 import Create from "./Create"
 import { globalRelays } from "./nostr"
+import AudioPlayer from "./AudioPlayer"
 
 function VoiceNote(props: { event: NostrEvent; class?: string }) {
   const [author] = createResource(() => props.event.pubkey, loadNostrUser)
@@ -62,7 +63,6 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
   const [zapAmount, setZapAmount] = createSignal(0)
   const [isZapping, setIsZapping] = createSignal(false)
   const [hasZapped, setHasZapped] = createSignal(false)
-  let audioRef: HTMLAudioElement | undefined
 
   const location = useLocation()
 
@@ -210,13 +210,7 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
               </div>
             </div>
             <div class="mt-2">
-              <audio
-                controls
-                class="w-full bg-[#f1f3f4] dark:invert rounded-lg"
-                ref={audioRef}
-                src={props.event.content}
-                preload="metadata"
-              />
+              <AudioPlayer event={props.event} />
             </div>
 
             {/* hashtags */}
