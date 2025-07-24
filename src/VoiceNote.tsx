@@ -150,8 +150,8 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
   const isReply = () => !!props.event.tags.find(tag => tag[0] === "e")
 
   return (
-    <div class="block rounded-lg transition-colors hover:bg-accent/50 py-2">
-      <Card class={cn(props.class, "p-4")}>
+    <div class="block rounded-lg transition-colors hover:bg-accent/50 p-2">
+      <Card class={cn(props.class, "p-4 dark:bg-white/12")}>
         <div class="flex items-start space-x-4">
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between">

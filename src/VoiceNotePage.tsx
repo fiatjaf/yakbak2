@@ -211,7 +211,9 @@ function VoiceNotePage() {
           <div class="mb-2">
             <VoiceNote
               event={root()}
-              class={event()?.id === root()?.id ? "border-sky-400 border-2" : "border-primary/20"}
+              class={
+                event()?.id === root()?.id ? "border-green-200/50 border-2" : "border-primary/20"
+              }
             />
           </div>
           <Show when={Object.keys(thread).length > 0}>
@@ -233,7 +235,7 @@ function VoiceNotePage() {
       <div class="translate-x-4">
         <VoiceNote
           event={props.event}
-          class={`${props.event.id === event()?.id ? "border-sky-400 border-2" : "border-primary/20"}`}
+          class={`${props.event.id === event()?.id ? "border-green-200/50 border-2" : "border-primary/20"}`}
         />
         <For each={props.children}>{subt => <ThreadWrapper {...subt} />}</For>
       </div>
