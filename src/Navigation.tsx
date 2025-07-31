@@ -1,7 +1,9 @@
-import { Component } from "solid-js"
+import { Component, Show } from "solid-js"
 import { A } from "@solidjs/router"
 import LoginArea from "./LoginArea"
 import ThemeToggle from "./components/ThemeToggle"
+import NotificationBell from "./components/NotificationBell"
+import user from "./user"
 
 function Navigation() {
   return (
@@ -14,6 +16,9 @@ function Navigation() {
 
         <div class="flex items-center gap-4">
           <ThemeToggle />
+          <Show when={user().current}>
+            <NotificationBell />
+          </Show>
           <LoginArea />
         </div>
       </div>
