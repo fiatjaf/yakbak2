@@ -1,4 +1,5 @@
 import { OutboxManager } from "@nostr/gadgets/outbox"
+import { IDBEventStore } from "@nostr/gadgets/store"
 import { Filter } from "@nostr/tools/filter"
 
 export type Tab =
@@ -22,4 +23,5 @@ export const global: DefinedTab = [
   }
 ]
 
-export const outbox = new OutboxManager([1222, 1244])
+export const store = new IDBEventStore()
+export const outbox = new OutboxManager([1222, 1244], { store })

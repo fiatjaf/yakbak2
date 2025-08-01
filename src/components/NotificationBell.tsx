@@ -1,6 +1,9 @@
 import { Bell, Heart, MessageCircle, Zap } from "lucide-solid"
 import { createSignal, For, Show, createResource, createEffect } from "solid-js"
 import { A } from "@solidjs/router"
+import { loadNostrUser } from "@nostr/gadgets/metadata"
+import { neventEncode } from "@nostr/tools/nip19"
+
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
 import { Card } from "./ui/card"
@@ -11,66 +14,26 @@ import {
   DropdownMenuTrigger
 } from "./ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
+
 import {
   notifications,
   unreadCount,
   markAsRead,
   markAllAsRead,
-  clearNotifications,
   Notification
 } from "../notifications"
-import { loadNostrUser } from "@nostr/gadgets/metadata"
-import { npubEncode, neventEncode } from "@nostr/tools/nip19"
 import { formatZapAmount, getSatoshisAmountFromBolt11 } from "../utils"
 import { pool } from "@nostr/gadgets/global"
 
 function NotificationBell() {
   const [isOpen, setIsOpen] = createSignal(false)
-  
-  // Debug logging
+
+  // debug logging
   createEffect(() => {
-    console.log(`NotificationBell - notifications count: ${notifications().length}, unread count: ${unreadCount()}`)
+    console.log(
+      `NotificationBell - notifications count: ${notifications().length}, unread count: ${unreadCount()}`
+    )
   })
-
-  function getNotificationIcon(type: Notification["type"]) {
-    switch (type) {
-      case "reply":
-        return <MessageCircle class="h-4 w-4 text-blue-500" />
-      case "reaction":
-        return <Heart class="h-4 w-4 text-red-500" />
-      case "zap":
-        return <Zap class="h-4 w-4 text-yellow-500" />
-    }
-  }
-
-  function getNotificationText(notification: Notification) {
-    switch (notification.type) {
-      case "reply":
-        return "replied to your voice note"
-      case "reaction":
-        return "liked your voice note"
-      case "zap":
-        const amount = getSatoshisAmountFromBolt11(
-          notification.event.tags.find(t => t[0] === "bolt11")?.[1] || ""
-        )
-        return `zapped ${formatZapAmount(amount)} sats`
-    }
-  }
-
-  function getTargetUrl(notification: Notification) {
-    return `/${neventEncode({
-      id: notification.targetEvent.id,
-      author: notification.targetEvent.pubkey,
-      relays: Array.from(pool.seenOn.get(notification.targetEvent.id) || []).map(r => r.url)
-    })}`
-  }
-
-  function handleNotificationClick(notification: Notification) {
-    if (!notification.read) {
-      markAsRead(notification.id)
-    }
-    setIsOpen(false)
-  }
 
   return (
     <DropdownMenu open={isOpen()} onOpenChange={setIsOpen}>
@@ -79,7 +42,7 @@ function NotificationBell() {
           <Bell class="h-5 w-5" />
           <Show when={unreadCount() > 0}>
             <Badge
-              variant="destructive"
+              variant="outline"
               class="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
             >
               {unreadCount() > 9 ? "9+" : unreadCount()}
@@ -91,18 +54,13 @@ function NotificationBell() {
         <div class="flex items-center justify-between p-2 border-b">
           <span class="font-medium">Notifications</span>
           <div class="flex gap-1">
-            <Show when={notifications().some(n => !n.read)}>
+            <Show when={notifications().some(n => !n.seen)}>
               <Button variant="ghost" size="sm" class="text-xs" onClick={() => markAllAsRead()}>
                 Mark all read
               </Button>
             </Show>
             <Show when={notifications().length > 0}>
-              <Button
-                variant="ghost"
-                size="sm"
-                class="text-xs"
-                onClick={() => clearNotifications()}
-              >
+              <Button variant="ghost" size="sm" class="text-xs" onClick={() => markAllAsRead()}>
                 Clear
               </Button>
             </Show>
@@ -126,6 +84,11 @@ function NotificationBell() {
       </DropdownMenuContent>
     </DropdownMenu>
   )
+
+  function handleNotificationClick(notification: Notification) {
+    markAsRead(notification)
+    setIsOpen(false)
+  }
 }
 
 function NotificationItem(props: { notification: Notification; onClick: () => void }) {
@@ -139,7 +102,7 @@ function NotificationItem(props: { notification: Notification; onClick: () => vo
         onClick={props.onClick}
       >
         <Card
-          class={`p-3 border-0 shadow-none ${props.notification.read ? "bg-transparent" : "bg-accent/50"}`}
+          class={`p-3 border-0 shadow-none ${props.notification.seen ? "bg-transparent" : "bg-accent/50"}`}
         >
           <div class="flex items-start space-x-3">
             <Avatar class="h-8 w-8 flex-shrink-0">
@@ -148,17 +111,17 @@ function NotificationItem(props: { notification: Notification; onClick: () => vo
             </Avatar>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 mb-1">
-                {getNotificationIcon(props.notification.type)}
+                {getNotificationIcon(props.notification)}
                 <span class="text-sm font-medium truncate">{author()?.shortName}</span>
               </div>
               <p class="text-xs text-muted-foreground mb-1">
                 {getNotificationText(props.notification)}
               </p>
               <span class="text-xs text-muted-foreground">
-                {new Date(props.notification.timestamp * 1000).toLocaleString()}
+                {new Date(props.notification.event.created_at * 1000).toLocaleString()}
               </span>
             </div>
-            <Show when={!props.notification.read}>
+            <Show when={!props.notification.seen}>
               <div class="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />
             </Show>
           </div>
@@ -166,39 +129,45 @@ function NotificationItem(props: { notification: Notification; onClick: () => vo
       </A>
     </DropdownMenuItem>
   )
+}
 
-  function getNotificationIcon(type: Notification["type"]) {
-    switch (type) {
-      case "reply":
-        return <MessageCircle class="h-4 w-4 text-blue-500" />
-      case "reaction":
-        return <Heart class="h-4 w-4 text-red-500" />
-      case "zap":
-        return <Zap class="h-4 w-4 text-yellow-500" />
-    }
+function getNotificationIcon(notification: Notification) {
+  switch (notification.event.kind) {
+    case 1244:
+      return <MessageCircle class="h-4 w-4 text-blue-500" />
+    case 7:
+      return <Heart class="h-4 w-4 text-red-500" />
+    case 9321:
+    case 9735:
+      return <Zap class="h-4 w-4 text-yellow-500" />
+    default:
+    // TODO: other kinds
   }
+}
 
-  function getNotificationText(notification: Notification) {
-    switch (notification.type) {
-      case "reply":
-        return "replied to your voice note"
-      case "reaction":
-        return "liked your voice note"
-      case "zap":
-        const amount = getSatoshisAmountFromBolt11(
-          notification.event.tags.find(t => t[0] === "bolt11")?.[1] || ""
-        )
-        return `zapped ${formatZapAmount(amount)} sats`
-    }
+function getNotificationText(notification: Notification) {
+  switch (notification.event.kind) {
+    case 1244:
+      return "replied to your voice note"
+    case 7:
+      return "liked your voice note"
+    case 9321:
+    case 9735:
+      const amount = getSatoshisAmountFromBolt11(
+        notification.event.tags.find(t => t[0] === "bolt11")?.[1] || ""
+      )
+      return `zapped ${formatZapAmount(amount)} sats`
+    default:
+    // TODO: other kinds
   }
+}
 
-  function getTargetUrl(notification: Notification) {
-    return `/${neventEncode({
-      id: notification.targetEvent.id,
-      author: notification.targetEvent.pubkey,
-      relays: Array.from(pool.seenOn.get(notification.targetEvent.id) || []).map(r => r.url)
-    })}`
-  }
+function getTargetUrl(notification: Notification) {
+  return `/${neventEncode({
+    id: notification.target.id,
+    author: notification.target.pubkey,
+    relays: Array.from(pool.seenOn.get(notification.target.id) || []).map(r => r.url)
+  })}`
 }
 
 export default NotificationBell

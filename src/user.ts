@@ -11,7 +11,7 @@ import {
 } from "@nostr/tools/pure"
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils"
 
-type User = NostrUser & { signer: Signer } & { _method: string }
+export type User = NostrUser & { signer: Signer } & { _method: string }
 type Signer = { signEvent: (event: EventTemplate) => Promise<VerifiedEvent> }
 
 const [user, set] = createSignal<{
