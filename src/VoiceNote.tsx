@@ -384,7 +384,7 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
           )
           setHasReacted(false)
           setReactionCount(prev => Math.max(0, prev - 1))
-          toast.success("Reaction removed")
+          toast.success("Reaction removed!")
         }
       } else {
         // add new reaction
@@ -396,11 +396,12 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
             content: "+",
             tags: [
               ["e", props.event.id],
-              ["p", props.event.pubkey]
+              ["p", props.event.pubkey],
+              ["k", props.event.kind.toString()]
             ]
           })
         )
-        toast.success("Like sent")
+        toast.success("Like sent!")
         setHasReacted(true)
       }
     } catch (error) {
@@ -418,8 +419,7 @@ function VoiceNote(props: { event: NostrEvent; class?: string }) {
     try {
       const zr = await user().current.signer.signEvent(
         makeZapRequest({
-          profile: props.event.pubkey,
-          event: props.event.id,
+          event: props.event,
           amount: settings().defaultZapAmount * 1000,
           relays: [...theirInbox(), ...ourOutbox()],
           comment: ""

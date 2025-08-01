@@ -27,8 +27,12 @@ createEffect(() => {
   if (!currentUser) return
   ;(async () => {
     const stored = outbox.store.queryEvents(
-      { kinds: notificationKinds, "#p": [currentUser.pubkey] },
-      350
+      {
+        kinds: notificationKinds,
+        "#k": ["1222", "1244"],
+        "#p": [currentUser.pubkey]
+      },
+      80
     )
     lastSeen = parseInt(localStorage.getItem(lastSeenKey(currentUser))) || 0
 
@@ -63,6 +67,7 @@ async function startNotificationMonitoring(since: number) {
   const filter: Filter = {
     kinds: notificationKinds,
     "#p": [currentUser.pubkey],
+    "#k": ["1222", "1244"],
     since
   }
 

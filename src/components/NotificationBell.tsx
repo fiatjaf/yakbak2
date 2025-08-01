@@ -41,7 +41,7 @@ function NotificationBell() {
               variant="outline"
               class="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
             >
-              {unreadCount() > 100 ? "100+" : unreadCount()}
+              {unreadCount() > 50 ? "50+" : unreadCount()}
             </Badge>
           </Show>
         </Button>
@@ -171,7 +171,7 @@ function getTargetUrl(notification: Notification) {
     author,
     relays: Array.from(pool.seenOn.get(id) || [])
       .map(r => r.url)
-      .concat(relay)
+      .concat(relay ? [relay] : [])
   })}`
 }
 

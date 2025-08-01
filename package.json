@@ -23,7 +23,7 @@
     "@getalby/sdk": "^5.0.0",
     "@kobalte/core": "^0.13.9",
     "@nostr/gadgets": "npm:@jsr/nostr__gadgets@0.0.38",
-    "@nostr/tools": "npm:@jsr/nostr__tools@2.16.0",
+    "@nostr/tools": "npm:@jsr/nostr__tools@2.16.1",
     "@solid-primitives/intersection-observer": "^2.2.1",
     "@solidjs/router": "^0.15.3",
     "@tailwindcss/vite": "^4.1.7",
