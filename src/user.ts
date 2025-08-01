@@ -59,6 +59,15 @@ async function makeUserLogin(data: string): Promise<User> {
   let signer: Signer
 
   if (data === "nip07") {
+    let i = 0
+    while (!(window as any).nostr) {
+      await new Promise(resolve => setTimeout(resolve, 300))
+      i++
+      if (i > 10) {
+        break
+      }
+    }
+
     pubkey = await (window as any).nostr.getPublicKey()
     signer = (window as any).nostr
   } else if (data.startsWith("bunker://")) {
@@ -102,8 +111,6 @@ function storeState() {
 }
 
 ;(async function initialLoad() {
-  await new Promise(resolve => setTimeout(resolve, 900))
-
   const logins = JSON.parse(localStorage.getItem("nostr:logins") || "[]") as string[]
   const users = await Promise.all(logins.map(data => makeUserLogin(data)))
 

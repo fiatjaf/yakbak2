@@ -15,20 +15,15 @@ import {
 } from "./ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 
-import {
-  notifications,
-  unreadCount,
-  markAsRead,
-  markAllAsRead,
-  Notification
-} from "../notifications"
+import { notifications, markAsRead, markAllAsRead, Notification } from "../notifications"
 import { formatZapAmount, getSatoshisAmountFromBolt11 } from "../utils"
 import { pool } from "@nostr/gadgets/global"
 
 function NotificationBell() {
   const [isOpen, setIsOpen] = createSignal(false)
+  const unreadCount = () =>
+    notifications().reduce((c, notification) => (notification.seen ? c : c + 1), 0)
 
-  // debug logging
   createEffect(() => {
     console.log(
       `NotificationBell - notifications count: ${notifications().length}, unread count: ${unreadCount()}`
@@ -38,14 +33,14 @@ function NotificationBell() {
   return (
     <DropdownMenu open={isOpen()} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger>
-        <Button variant="ghost" size="icon" class="relative">
+        <Button variant="ghost" size="icon" class="relative cursor-pointer">
           <Bell class="h-5 w-5" />
           <Show when={unreadCount() > 0}>
             <Badge
               variant="outline"
               class="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
             >
-              {unreadCount() > 9 ? "9+" : unreadCount()}
+              {unreadCount() > 100 ? "100+" : unreadCount()}
             </Badge>
           </Show>
         </Button>
@@ -54,14 +49,9 @@ function NotificationBell() {
         <div class="flex items-center justify-between p-2 border-b">
           <span class="font-medium">Notifications</span>
           <div class="flex gap-1">
-            <Show when={notifications().some(n => !n.seen)}>
+            <Show when={notifications()?.some(n => !n.seen)}>
               <Button variant="ghost" size="sm" class="text-xs" onClick={() => markAllAsRead()}>
                 Mark all read
-              </Button>
-            </Show>
-            <Show when={notifications().length > 0}>
-              <Button variant="ghost" size="sm" class="text-xs" onClick={() => markAllAsRead()}>
-                Clear
               </Button>
             </Show>
           </div>
@@ -69,7 +59,7 @@ function NotificationBell() {
         <Show
           when={notifications().length > 0}
           fallback={
-            <div class="p-4 text-center text-sm text-muted-foreground">No notifications yet</div>
+            <div class="p-4 text-center text-sm text-muted-foreground">No notifications yet.</div>
           }
         >
           <For each={notifications()}>
@@ -163,10 +153,24 @@ function getNotificationText(notification: Notification) {
 }
 
 function getTargetUrl(notification: Notification) {
+  let tag = notification.event.tags.find(t => t[0] === "E")
+  if (!tag) {
+    tag = notification.event.tags.find(t => t[0] === "e")
+    if (!tag) {
+      return null
+    }
+  }
+
+  const id = tag[1]
+  const relay = tag[2]
+  const author = tag[3]
+
   return `/${neventEncode({
-    id: notification.target.id,
-    author: notification.target.pubkey,
-    relays: Array.from(pool.seenOn.get(notification.target.id) || []).map(r => r.url)
+    id,
+    author,
+    relays: Array.from(pool.seenOn.get(id) || [])
+      .map(r => r.url)
+      .concat(relay)
   })}`
 }
 

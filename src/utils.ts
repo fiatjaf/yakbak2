@@ -1,6 +1,3 @@
-import { NostrEvent } from "@nostr/tools"
-import { store } from "./nostr"
-
 export function formatZapAmount(amount: number): string {
   if (amount < 1000) {
     return amount.toString()
@@ -98,15 +95,4 @@ export async function generateWaveform(audioBlob: Blob, samples = 100): Promise<
 
   audioContext.close()
   return waveform
-}
-
-export async function getTargetFor(
-  notificationEvent: NostrEvent
-): Promise<null | [targetId: string, target: NostrEvent]> {
-  const targetEventId = notificationEvent.tags.find(t => t[0] === "e")?.[1]
-  if (!targetEventId) {
-    return null
-  }
-  let [target] = await store.getByIds([targetEventId])
-  return [targetEventId, target]
 }
