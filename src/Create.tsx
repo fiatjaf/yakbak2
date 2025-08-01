@@ -35,6 +35,24 @@ function Create(props: {
   toRelays?: string[]
   exclusive?: boolean
 }) {
+  ;<Show when={user().current?.signer.signEvent}>
+    <CreateRecordingFloatingActionButton
+      replyingTo={props.replyingTo}
+      children={props.children}
+      vanishesOnScroll={props.vanishesOnScroll}
+      toRelays={props.toRelays}
+      exclusive={props.exclusive}
+    />
+  </Show>
+}
+
+function CreateRecordingFloatingActionButton(props: {
+  replyingTo?: NostrEvent
+  children?: JSXElement
+  vanishesOnScroll?: boolean
+  toRelays?: string[]
+  exclusive?: boolean
+}) {
   // eslint-disable-next-line solid/reactivity
   const [isRecording, setIsRecording] = props.replyingTo
     ? [

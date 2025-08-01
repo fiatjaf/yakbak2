@@ -84,6 +84,11 @@ async function makeUserLogin(data: string): Promise<User> {
     await bunker.connect()
     pubkey = await bunker.getPublicKey()
     signer = bunker
+  } else if (data.startsWith("npub1")) {
+    pubkey = decode(data).data as string
+    signer = {
+      signEvent: null
+    }
   } else {
     const res = decode(data)
     const sk = res.data as Uint8Array

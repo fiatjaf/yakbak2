@@ -21,7 +21,7 @@ function LoginDialog(props: {
   onSignup?: () => void
 }) {
   const [isLoading, setIsLoading] = createSignal(false)
-  const [nsec, setNsec] = createSignal("")
+  const [key, setKey] = createSignal("")
   const [bunkerUri, setBunkerUri] = createSignal("")
   const showExtension = () => (window as any).nostr && !user().all.find(u => u._method === "nip07")
 
@@ -41,7 +41,7 @@ function LoginDialog(props: {
               <Show when={showExtension()}>
                 <TabsTrigger value="extension">Extension</TabsTrigger>
               </Show>
-              <TabsTrigger value="key">nsec</TabsTrigger>
+              <TabsTrigger value="key">Key</TabsTrigger>
               <TabsTrigger value="bunker">Bunker</TabsTrigger>
             </TabsList>
 
@@ -65,22 +65,26 @@ function LoginDialog(props: {
               <div class="space-y-4">
                 <div class="space-y-2">
                   <Label for="nsec" class="text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Enter your secret key:
+                    Enter your secret key or public key:
                   </Label>
                   <Input
                     id="nsec"
-                    value={nsec()}
-                    onInput={e => setNsec(e.target.value)}
+                    value={key()}
+                    onInput={e => setKey(e.target.value)}
                     class="rounded-lg border-gray-300 dark:border-gray-700 focus-visible:ring-primary"
-                    placeholder="nsec1..."
+                    placeholder="nsec1... or npub1..."
                   />
                 </div>
                 <Button
                   class="w-full rounded-full py-6 mt-4"
                   onClick={handleKeyLogin}
-                  disabled={isLoading() || !nsec().trim() || !nsec().startsWith("nsec1")}
+                  disabled={
+                    isLoading() ||
+                    !key().trim() ||
+                    !(key().startsWith("nsec1") || key().startsWith("npub1"))
+                  }
                 >
-                  {isLoading() ? "Verifying..." : "Login with Nsec"}
+                  {isLoading() ? "Verifying..." : "Login with Key"}
                 </Button>
               </div>
             </TabsContent>
@@ -159,14 +163,13 @@ function LoginDialog(props: {
   }
 
   function handleKeyLogin() {
-    if (!nsec().trim() || !nsec().startsWith("nsec1")) return
     setIsLoading(true)
 
     try {
-      addLogin(nsec())
+      addLogin(key())
       props.onLogin()
       props.onClose()
-      setNsec("")
+      setKey("")
     } catch (error) {
       console.error("nsec login failed:", error)
     } finally {
