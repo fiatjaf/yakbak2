@@ -88,7 +88,11 @@ function NotificationItem(props: { notification: Notification; onClick: () => vo
   return (
     <DropdownMenuItem class="p-0">
       <A
-        href={getTargetUrl(props.notification)}
+        href={`/${neventEncode({
+          id: props.notification.event.id,
+          author: props.notification.event.pubkey,
+          relays: Array.from(pool.seenOn.get(props.notification.event.id) || []).map(r => r.url)
+        })}`}
         class="w-full p-3 no-underline"
         onClick={props.onClick}
       >
@@ -151,28 +155,6 @@ function getNotificationText(notification: Notification) {
     default:
     // TODO: other kinds
   }
-}
-
-function getTargetUrl(notification: Notification) {
-  let tag = notification.event.tags.find(t => t[0] === "E")
-  if (!tag) {
-    tag = notification.event.tags.find(t => t[0] === "e")
-    if (!tag) {
-      return null
-    }
-  }
-
-  const id = tag[1]
-  const relay = tag[2]
-  const author = tag[3]
-
-  return `/${neventEncode({
-    id,
-    author,
-    relays: Array.from(pool.seenOn.get(id) || [])
-      .map(r => r.url)
-      .concat(relay ? [relay] : [])
-  })}`
 }
 
 export default NotificationBell
