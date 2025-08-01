@@ -35,13 +35,15 @@ function VoiceNotePage() {
       }
 
       // try on outbox relays if there is an author hint
-      let outboxMinusHint = (await loadRelayList(ptr.author)).items
-        .filter(r => r.write && ptr.relays.indexOf(r.url) === -1)
-        .slice(0, 4)
-        .map(r => r.url)
-      res = await pool.querySync(outboxMinusHint, { ids: [ptr.id] }, { label: "note-2nd" })
-      if (res.length === 0) throw new Error(`couldn't find event ${ptr.id}`)
-      return res[0]
+      if (ptr.author) {
+        let outboxMinusHint = (await loadRelayList(ptr.author)).items
+          .filter(r => r.write && ptr.relays.indexOf(r.url) === -1)
+          .slice(0, 4)
+          .map(r => r.url)
+        res = await pool.querySync(outboxMinusHint, { ids: [ptr.id] }, { label: "note-2nd" })
+        if (res.length === 0) throw new Error(`couldn't find event ${ptr.id}`)
+        return res[0]
+      }
     }
   )
 
