@@ -23,5 +23,4 @@ export const global: DefinedTab = [
   }
 ]
 
-export const store = new IDBEventStore()
-export const outbox = new OutboxManager([1222, 1244], { store })
+export const outbox = new OutboxManager([{ kinds: [1222, 1244] }])

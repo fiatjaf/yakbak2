@@ -6,7 +6,7 @@ import { loadRelayList } from "@nostr/gadgets/lists"
 import { SubCloser } from "@nostr/tools/abstract-pool"
 
 import user, { User } from "./user"
-import { store } from "./nostr"
+import { outbox } from "./nostr"
 
 export type Notification = {
   event: NostrEvent
@@ -26,7 +26,10 @@ createEffect(() => {
   const currentUser = user().current
   if (!currentUser) return
   ;(async () => {
-    const stored = store.queryEvents({ kinds: notificationKinds, "#p": [currentUser.pubkey] }, 350)
+    const stored = outbox.store.queryEvents(
+      { kinds: notificationKinds, "#p": [currentUser.pubkey] },
+      350
+    )
     lastSeen = parseInt(localStorage.getItem(lastSeenKey(currentUser))) || 0
 
     let all: Notification[] = []
@@ -71,9 +74,7 @@ async function startNotificationMonitoring(since: number) {
       if (!event.tags.find(t => t[0] === "e" || t[0] === "E")?.[1]) return
 
       // store on database
-      store.saveEvent(event).catch(() => {
-        // TODO: remove this catch after updating gadgets
-      })
+      outbox.store.saveEvent(event)
 
       // don't notify for our own events
       if (event.pubkey === currentUser.pubkey) return

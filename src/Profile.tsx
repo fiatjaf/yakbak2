@@ -152,13 +152,13 @@ function Profile() {
       }
 
       if (update) {
-        const outbox = (await loadRelayList(user().current.pubkey)).items
+        const writeRelays = (await loadRelayList(user().current.pubkey)).items
           .filter(r => r.write)
           .slice(0, 4)
           .map(r => r.url)
 
         const newEvent = await user().current.signer.signEvent(update)
-        await Promise.any(pool.publish(outbox, newEvent))
+        await Promise.any(pool.publish(writeRelays, newEvent))
         toast.success(successMessage)
         setIsFollowing(newState)
         await loadFollowsList(user().current.pubkey, [], newEvent)

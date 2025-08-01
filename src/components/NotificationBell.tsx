@@ -1,6 +1,8 @@
 import { Bell, Heart, MessageCircle, Zap } from "lucide-solid"
 import { createSignal, For, Show, createResource, createEffect } from "solid-js"
 import { A } from "@solidjs/router"
+import { pool } from "@nostr/gadgets/global"
+import { getSatoshisAmountFromBolt11 } from "@nostr/tools/nip57"
 import { loadNostrUser } from "@nostr/gadgets/metadata"
 import { neventEncode } from "@nostr/tools/nip19"
 
@@ -16,8 +18,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 
 import { notifications, markAsRead, markAllAsRead, Notification } from "../notifications"
-import { formatZapAmount, getSatoshisAmountFromBolt11 } from "../utils"
-import { pool } from "@nostr/gadgets/global"
+import { formatZapAmount } from "../utils"
 
 function NotificationBell() {
   const [isOpen, setIsOpen] = createSignal(false)

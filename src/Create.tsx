@@ -57,7 +57,7 @@ function Create(props: {
   let audioRef: HTMLAudioElement | undefined
   let mediaRecorder: MediaRecorder | undefined
 
-  const [ourOutbox] = createResource(
+  const [ourWrite] = createResource(
     user,
     async user => {
       if (!user?.current) return []
@@ -444,7 +444,7 @@ function Create(props: {
       const relays = props.replyingTo
         ? // when replying to someone send to their inbox and our outbox
           [
-            ...ourOutbox(),
+            ...ourWrite(),
             ...(await loadRelayList(props.replyingTo.pubkey)).items
               .filter(r => r.read)
               .map(r => r.url),
@@ -465,9 +465,9 @@ function Create(props: {
             ? // if exclusive (i.e. we're browsing a relay feed) send only to that
               props.toRelays
             : // otherwise also to our outbox
-              [...ourOutbox(), ...props.toRelays]
+              [...ourWrite(), ...props.toRelays]
           : // in any other case send just to our outbox
-            ourOutbox()
+            ourWrite()
 
       const pubs = pool.publish(relays, event, {
         onauth: evtt => user().current.signer.signEvent(evtt)

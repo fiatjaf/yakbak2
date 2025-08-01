@@ -15,7 +15,6 @@ import { NostrEvent } from "@nostr/tools/pure"
 import { Filter } from "@nostr/tools/filter"
 import { pool } from "@nostr/gadgets/global"
 import { outboxFilterRelayBatch } from "@nostr/gadgets/outbox"
-import { DuplicateEventError } from "@nostr/gadgets/store"
 import { loadFavoriteRelays, loadFollowsList } from "@nostr/gadgets/lists"
 import { SubCloser } from "@nostr/tools/abstract-pool"
 import { Image } from "@kobalte/core/image"
@@ -271,16 +270,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
                   label: `preliminary-${selectedLabel}`,
                   async onevent(event) {
                     preliminaryEvents.push(event)
-
-                    try {
-                      await outbox.store.saveEvent(event)
-                    } catch (err) {
-                      if (err instanceof DuplicateEventError) {
-                        console.warn("tried to save duplicate from ongoing:", event)
-                      } else {
-                        throw err
-                      }
-                    }
+                    outbox.store.saveEvent(event)
                   },
                   oneose() {
                     preliminarySub.close("preliminary req closed automatically on eose")
@@ -302,7 +292,7 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           }
 
           // now do the sync from wherever we left before (or an indeterminate point in the past) to now
-          let addedNewEvents = await outbox.sync(authors, signal)
+          let addedNewEvents = await outbox.sync(authors, { signal })
 
           // after the sync we can show the events we have in the database
           await preliminary
@@ -313,7 +303,12 @@ function Feed(props: { forcedTabs?: DefinedTab[]; invisibleToggles?: boolean }) 
           setPaginable(true)
 
           // finally open this ongoing subscription
-          outbox.live(authors, debounce(flush, 500), signal)
+          outbox.live(authors, {
+            signal,
+            onupdate() {
+              debounce(flush, 500)
+            }
+          })
         }
       }
     })()
