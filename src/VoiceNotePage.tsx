@@ -47,9 +47,9 @@ function VoiceNotePage() {
     }
   )
 
-  const [root] = createResource<NostrEvent | null, NostrEvent>(event, async (event: NostrEvent) => {
+  const [root] = createResource<NostrEvent | null, NostrEvent | null>(event, async (event: NostrEvent) => {
     const tag = event.tags.find(t => t[0] === "E")
-    if (!tag) return event
+    if (!tag) return event // this is already the root
 
     const id = tag[1]
     // try on local database
@@ -87,8 +87,8 @@ function VoiceNotePage() {
     res = await pool.querySync(sameRelayMinusHintAndOutbox, { ids: [id] }, { label: "parent-3nd" })
     if (res.length) return res[0]
 
-    // fallback to treating this as the root if none other is found
-    return event
+    // null denotes the root could not be found
+    return null
   })
 
   const [thread, setThread] = createStore<Record<string, SubThread>>({})
@@ -205,10 +205,21 @@ function VoiceNotePage() {
       </Match>
       <Match when={!event()}>
         <div class="container mx-auto px-4 py-8 max-w-2xl">
-          <div class="text-center">Voice note not found</div>
+          <div class="text-center">Voice note not found.</div>
         </div>
       </Match>
-      <Match when={root()}>
+      <Match when={!root()}>
+        <div class="container mx-auto px-4 py-8 max-w-2xl">
+          <div class="text-center">Thread root could not be found.</div>
+          <div class="mt-2">
+            <VoiceNote
+              event={event()}
+              class="border-green-200/50 border-2"
+            />
+          </div>
+        </div>
+      </Match>
+      <Match when={true}>
         <div class="container mx-auto px-4 py-8 max-w-2xl">
           <div class="mb-2">
             <VoiceNote
@@ -221,7 +232,7 @@ function VoiceNotePage() {
           <Show when={Object.keys(thread).length > 0}>
             <For each={Object.values(thread)}>
               {subt => (
-                <Show when={subt.event.tags.find(t => t[0] === "e")[1] === root().id}>
+                <Show when={subt.event.tags.find(t => t[0] === "e")[1] === root()?.id}>
                   <ThreadWrapper {...subt} />
                 </Show>
               )}

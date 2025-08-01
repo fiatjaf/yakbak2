@@ -1,5 +1,5 @@
 import { Bell, Heart, MessageCircle, Zap } from "lucide-solid"
-import { createSignal, For, Show, createResource, createEffect } from "solid-js"
+import { createSignal, For, Show, createResource } from "solid-js"
 import { A } from "@solidjs/router"
 import { pool } from "@nostr/gadgets/global"
 import { getSatoshisAmountFromBolt11 } from "@nostr/tools/nip57"
@@ -24,12 +24,6 @@ function NotificationBell() {
   const [isOpen, setIsOpen] = createSignal(false)
   const unreadCount = () =>
     notifications().reduce((c, notification) => (notification.seen ? c : c + 1), 0)
-
-  createEffect(() => {
-    console.log(
-      `NotificationBell - notifications count: ${notifications().length}, unread count: ${unreadCount()}`
-    )
-  })
 
   return (
     <DropdownMenu open={isOpen()} onOpenChange={setIsOpen}>
