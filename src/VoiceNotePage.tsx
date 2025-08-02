@@ -47,63 +47,56 @@ function VoiceNotePage() {
     }
   )
 
-  const [root] = createResource<NostrEvent | null, NostrEvent | null>(event, async (event: NostrEvent) => {
-    const tag = event.tags.find(t => t[0] === "E")
-    if (!tag) return event // this is already the root
+  const [root] = createResource<NostrEvent | null, NostrEvent>(
+    event,
+    async (event: NostrEvent): Promise<NostrEvent | null> => {
+      const tagRoot = event.tags.find(t => t[0] === "E")
+      if (!tagRoot) return event // this is already the root
 
-    const id = tag[1]
-    // try on local database
-    let res = await outbox.store.getByIds([id])
-    if (res.length) return res[0]
-
-    const hint = tag[2]
-    if (hint) {
-      let res = await pool.querySync([hint], { ids: [id] }, { label: "parent-1st" })
-      if (res.length) return res[0]
+      const root = await tryFromTag(event, tagRoot)
+      return root || null
     }
+  )
 
-    // try relays from the author if there is an author hint
-    const author = tag[3]
-    let authorOutboxMinusHint: string[] = []
-    if (author) {
-      authorOutboxMinusHint = (await loadRelayList(author)).items
-        .filter(r => r.write && r.url !== hint)
-        .slice(0, 4)
-        .map(r => r.url)
+  const eventAndRoot = () => ({ event: event(), root: root() })
+  const [parent] = createResource<
+    NostrEvent | null,
+    { event: NostrEvent; root: NostrEvent | null }
+  >(eventAndRoot, async ({ event, root }): Promise<NostrEvent | null> => {
+    if (root) return null // no need to try this if we already have root
 
-      // try on outbox relays
-      const res = await pool.querySync(
-        authorOutboxMinusHint,
-        { ids: [id] },
-        { label: "parent-2nd" }
-      )
-      if (res.length) return res[0]
-    }
+    const tagParent = event.tags.find(t => t[0] === "e")
+    if (!tagParent) return null
 
-    // now try the same relays this note was found in
-    const sameRelayMinusHintAndOutbox = Array.from(pool.seenOn.get(event.id) || [])
-      .map(r => r.url)
-      .filter(url => url !== hint && authorOutboxMinusHint.indexOf(url) === -1)
-    res = await pool.querySync(sameRelayMinusHintAndOutbox, { ids: [id] }, { label: "parent-3nd" })
-    if (res.length) return res[0]
-
-    // null denotes the root could not be found
-    return null
+    const parent = await tryFromTag(event, tagParent)
+    return parent || null
   })
 
   const [thread, setThread] = createStore<Record<string, SubThread>>({})
 
   let closer: SubCloser
   createEffect(() => {
-    const root_ = root()
-    if (!root_) return
+    let root_ = root()
+    let tagNameRef: "#E" | "#e" = "#E"
+
+    // when root is not available, use parent
+    if (!root_) {
+      tagNameRef = "#e"
+
+      root_ = parent()
+      if (!root_) {
+        // if none are available use ourselves as a fake root
+        return
+      }
+    }
+
     ;(async () => {
       let waiting: NostrEvent[] = []
 
       // fetch from our database
       for await (let event of outbox.store.queryEvents({
         kinds: [1244],
-        "#E": [root_.id],
+        [tagNameRef as "#"]: [root_.id],
         limit: 30
       })) {
         waiting.push(event)
@@ -132,7 +125,7 @@ function VoiceNotePage() {
         inbox,
         {
           kinds: [1244],
-          "#E": [root_.id],
+          [tagNameRef as "#"]: [root_.id],
           limit: 30
         },
         {
@@ -210,12 +203,14 @@ function VoiceNotePage() {
       </Match>
       <Match when={!root()}>
         <div class="container mx-auto px-4 py-8 max-w-2xl">
-          <div class="text-center">Thread root could not be found.</div>
-          <div class="mt-2">
-            <VoiceNote
-              event={event()}
-              class="border-green-200/50 border-2"
-            />
+          <div class="text-center mb-2">Thread root could not be found.</div>
+          <Show when={parent()}>
+            <div class="mb-2">
+              <VoiceNote event={parent()} class="border-primary/20" />
+            </div>
+          </Show>
+          <div class="mt-2 translate-x-4">
+            <VoiceNote event={event()} class="border-green-200/50 border-2" />
           </div>
         </div>
       </Match>
@@ -254,6 +249,40 @@ function VoiceNotePage() {
       </div>
     )
   }
+}
+
+async function tryFromTag(event: NostrEvent, tag: string[]): Promise<NostrEvent | undefined> {
+  const id = tag[1]
+  // try on local database
+  let res = await outbox.store.getByIds([id])
+  if (res.length) return res[0]
+
+  const hint = tag[2]
+  if (hint) {
+    let res = await pool.querySync([hint], { ids: [id] }, { label: "parent-1st" })
+    if (res.length) return res[0]
+  }
+
+  // try relays from the author if there is an author hint
+  const author = tag[3]
+  let authorOutboxMinusHint: string[] = []
+  if (author) {
+    authorOutboxMinusHint = (await loadRelayList(author)).items
+      .filter(r => r.write && r.url !== hint)
+      .slice(0, 4)
+      .map(r => r.url)
+
+    // try on outbox relays
+    const res = await pool.querySync(authorOutboxMinusHint, { ids: [id] }, { label: "parent-2nd" })
+    if (res.length) return res[0]
+  }
+
+  // now try the same relays this note was found in
+  const sameRelayMinusHintAndOutbox = Array.from(pool.seenOn.get(event.id) || [])
+    .map(r => r.url)
+    .filter(url => url !== hint && authorOutboxMinusHint.indexOf(url) === -1)
+  res = await pool.querySync(sameRelayMinusHintAndOutbox, { ids: [id] }, { label: "parent-3nd" })
+  if (res.length) return res[0]
 }
 
 export default VoiceNotePage
