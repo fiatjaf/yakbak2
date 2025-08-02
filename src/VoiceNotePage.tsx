@@ -19,7 +19,7 @@ type SubThread = {
 function VoiceNotePage() {
   const params = useParams<{ nevent: string }>()
 
-  const [event] = createResource(
+  const [event] = createResource<NostrEvent | null, string>(
     () => params.nevent,
     async nevent => {
       const ptr = decode(nevent).data as EventPointer
@@ -44,12 +44,16 @@ function VoiceNotePage() {
         if (res.length === 0) throw new Error(`couldn't find event ${ptr.id}`)
         return res[0]
       }
+
+      return null
     }
   )
 
-  const [root] = createResource<NostrEvent | null, NostrEvent>(
+  const [root] = createResource<NostrEvent | null, NostrEvent | null>(
     event,
     async (event: NostrEvent): Promise<NostrEvent | null> => {
+      if (!event) return null
+
       const tagRoot = event.tags.find(t => t[0] === "E")
       if (!tagRoot) return event // this is already the root
 
@@ -64,6 +68,7 @@ function VoiceNotePage() {
     { event: NostrEvent; root: NostrEvent | null }
   >(eventAndRoot, async ({ event, root }): Promise<NostrEvent | null> => {
     if (root) return null // no need to try this if we already have root
+    if (!event) return null
 
     const tagParent = event.tags.find(t => t[0] === "e")
     if (!tagParent) return null
