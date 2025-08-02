@@ -150,7 +150,7 @@ function VoiceNotePage() {
                 console.warn("couldn't find the parent for", event, "in the thread")
                 return
               }
-            } else {
+            } else if (!waiting.find(evt => evt.id === event.id)) {
               waiting.push(event)
             }
           },
