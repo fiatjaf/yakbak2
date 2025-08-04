@@ -71,7 +71,7 @@ async function startNotificationMonitoring(since: number) {
     since
   }
 
-  console.log(`notifications sub on ${relays.length} with ${filter}`)
+  console.log(`notifications sub on ${relays.length} with:`, filter)
   notificationCloser = pool.subscribe(relays, filter, {
     label: "notifications",
     async onevent(event) {

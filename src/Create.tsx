@@ -35,15 +35,17 @@ function Create(props: {
   toRelays?: string[]
   exclusive?: boolean
 }) {
-  ;<Show when={user().current?.signer.signEvent}>
-    <CreateRecordingFloatingActionButton
-      replyingTo={props.replyingTo}
-      children={props.children}
-      vanishesOnScroll={props.vanishesOnScroll}
-      toRelays={props.toRelays}
-      exclusive={props.exclusive}
-    />
-  </Show>
+  return (
+    <Show when={user().current?.signer.signEvent}>
+      <CreateRecordingFloatingActionButton
+        replyingTo={props.replyingTo}
+        children={props.children}
+        vanishesOnScroll={props.vanishesOnScroll}
+        toRelays={props.toRelays}
+        exclusive={props.exclusive}
+      />
+    </Show>
+  )
 }
 
 function CreateRecordingFloatingActionButton(props: {
