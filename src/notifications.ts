@@ -29,7 +29,7 @@ createEffect(() => {
     const stored = outbox.store.queryEvents(
       {
         kinds: notificationKinds,
-        "#k": ["1222", "1244"],
+        "#K": ["1222", "1244"],
         "#p": [currentUser.pubkey]
       },
       80
